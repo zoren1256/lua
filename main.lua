@@ -30,7 +30,8 @@ local Toggles = {
     DistanceESP = false,
     MagicBullet = false,
     InfiniteAmmo = false,
-    AutoHeal = false
+    AutoHeal = false,
+    TriggerBot = false
 }
 
 local Settings = {
@@ -843,14 +844,16 @@ local function createESP(player)
                 billboard.Enabled = false
             end
 
-            -- 更新外框透視
+            -- 更新外框透視 (AI 追蹤專用螢光紫)
             if Toggles.BoxESP then
                 if not espFolder:FindFirstChild("BoxHighlight") then
                     local hl = Instance.new("Highlight")
                     hl.Name = "BoxHighlight"
                     hl.Parent = espFolder
-                    hl.FillTransparency = 1
-                    hl.OutlineColor = Theme.MainColor
+                    hl.Adornee = character -- 必須設定 Adornee 才會顯示
+                    hl.FillColor = Color3.fromRGB(255, 0, 255) -- 純洋紅色 (Python 最好抓的顏色)
+                    hl.FillTransparency = 0.5
+                    hl.OutlineColor = Color3.fromRGB(255, 0, 255)
                     hl.OutlineTransparency = 0
                 end
             else
@@ -880,6 +883,19 @@ UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
     if input.UserInputType == Enum.UserInputType.MouseButton2 then AimbotHolding = true end
     if input.UserInputType == Enum.UserInputType.MouseButton1 then IsShooting = true end
+    
+    -- 瞬移攻擊 (Teleport to Target)
+    if input.KeyCode == Enum.KeyCode.T then
+        local target = getClosestPlayer()
+        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                -- 傳送到目標背後 3 Studs 的位置
+                local targetHRP = target.Character.HumanoidRootPart
+                local teleportCFrame = targetHRP.CFrame * CFrame.new(0, 0, 3)
+                LocalPlayer.Character.HumanoidRootPart.CFrame = teleportCFrame
+            end
+        end
+    end
 end)
 UserInputService.InputEnded:Connect(function(input, gpe)
     if input.UserInputType == Enum.UserInputType.MouseButton2 then AimbotHolding = false end
@@ -928,6 +944,26 @@ RunService.RenderStepped:Connect(function()
                 else
                     Camera.CFrame = targetCameraCFrame
                 end
+            end
+        end
+    end
+    
+    -- 自動開槍 (TriggerBot)
+    if Toggles.TriggerBot and LocalPlayer.Character then
+        local mouseLocation = UserInputService:GetMouseLocation()
+        local ray = Camera:ScreenPointToRay(mouseLocation.X, mouseLocation.Y)
+        local raycastParams = RaycastParams.new()
+        raycastParams.FilterDescendantsInstances = {LocalPlayer.Character, Workspace.Terrain, Workspace:FindFirstChild("ZRNSnowPart")}
+        raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+        raycastParams.IgnoreWater = true
+        
+        local result = Workspace:Raycast(ray.Origin, ray.Direction * 1000, raycastParams)
+        if result and result.Instance then
+            local model = result.Instance:FindFirstAncestorOfClass("Model")
+            if model and model:FindFirstChild("Humanoid") and Players:GetPlayerFromCharacter(model) then
+                -- 瞄準到敵人，模擬點擊
+                mouse1press()
+                task.delay(0.05, function() mouse1release() end)
             end
         end
     end
@@ -1000,6 +1036,7 @@ local Window = Library:CreateWindow({
 local CombatTab = Window:CreateTab("戰鬥")
 
 CombatTab:CreateToggle("啟用自瞄 (右鍵觸發)", false, function(state) Toggles.Aimbot = state end)
+CombatTab:CreateToggle("自動開槍 (TriggerBot)", false, function(state) Toggles.TriggerBot = state end)
 CombatTab:CreateToggle("啟用靜默追蹤 (穿牆)", false, function(state) Toggles.MagicBullet = state end)
 CombatTab:CreateToggle("限制鎖定範圍 (FOV)", true, function(state) Settings.AimbotUseFOV = state end)
 CombatTab:CreateToggle("啟用移動預判 (Prediction)", false, function(state) Settings.AimbotPrediction = state end)
