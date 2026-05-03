@@ -1075,28 +1075,12 @@ local successMT, errMT = pcall(function()
                 if self == Workspace and method == "Raycast" then
                     local origin = args[1]
                     local direction = args[2]
-                    local params = args[3]
-                    
                     -- 攔截射擊射線
                     if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
-                        -- 1. 鎖定方向
+                        -- 極簡暴力解法：保持原點 (Origin) 不變以繞過反作弊原點檢查，
+                        -- 直接將射線方向 (Direction) 強制鎖死指向敵人的部位。
                         local newDirection = (targetPart.Position - origin).Unit * 1000
                         args[2] = newDirection
-                        
-                        -- 2. 幽靈子彈 (Ghost Bullet / 完美穿牆)
-                        -- 不改變發射起點 (防作弊不會抓)，但我們強行把射線的「碰撞白名單」改成【只有敵人】。
-                        -- 這樣子彈就會像幽靈一樣，直接無視地圖上所有的牆壁、石頭、建築，筆直穿透過去命中敵人！
-                        if params and typeof(params) == "RaycastParams" then
-                            local enemyChars = {}
-                            for _, p in pairs(Players:GetPlayers()) do
-                                if p ~= LocalPlayer and p.Character then
-                                    table.insert(enemyChars, p.Character)
-                                end
-                            end
-                            params.FilterType = Enum.RaycastFilterType.Include -- 改成白名單模式
-                            params.FilterDescendantsInstances = enemyChars       -- 白名單裡只放敵人
-                            args[3] = params
-                        end
                         
                         return oldNamecall(self, unpack(args))
                     end
@@ -1105,8 +1089,6 @@ local successMT, errMT = pcall(function()
                     local direction = args[1].Direction
                     if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
                         local newDirection = (targetPart.Position - origin).Unit * 1000
-                        
-                        -- 舊版 Raycast 無法簡單修改白名單，但現代遊戲 (Rivals) 幾乎 100% 只用上面的 Workspace:Raycast
                         args[1] = Ray.new(origin, newDirection)
                         
                         return oldNamecall(self, unpack(args))
