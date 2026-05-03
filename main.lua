@@ -743,45 +743,16 @@ local function getSmartTargetPart(character)
     raycastParams.FilterType = Enum.RaycastFilterType.Exclude
     raycastParams.IgnoreWater = true
 
-    -- 【Rivals 特化】：優先尋找實體 Hitbox
-    local hitboxes = character:FindFirstChild("Hitboxes") or character:FindFirstChild("Hitbox")
-    local primaryHitbox = nil
-    
-    if hitboxes then
-        primaryHitbox = hitboxes:FindFirstChild("Head") or hitboxes:FindFirstChild("HeadHitbox")
-        if not primaryHitbox then
-            for _, v in pairs(hitboxes:GetChildren()) do
-                if v:IsA("BasePart") then
-                    primaryHitbox = v
-                    break
-                end
-            end
-        end
-    end
-    
-    if not primaryHitbox then
-        for _, v in pairs(character:GetDescendants()) do
-            if v:IsA("BasePart") and v.Name:lower():match("hitbox") and v.Name:lower():match("head") then
-                primaryHitbox = v
-                break
-            end
-        end
-    end
-
     local partsToScan = {}
-    if primaryHitbox then
-        table.insert(partsToScan, primaryHitbox)
+    if Settings.AimbotTarget ~= "Auto (AI)" then
+        table.insert(partsToScan, Settings.AimbotTarget)
     else
-        if Settings.AimbotTarget ~= "Auto (AI)" then
-            table.insert(partsToScan, Settings.AimbotTarget)
-        else
-            partsToScan = {"Head", "UpperTorso", "LowerTorso", "RightUpperArm", "LeftUpperArm", "RightUpperLeg", "LeftUpperLeg"}
-        end
+        partsToScan = {"Head", "UpperTorso", "LowerTorso", "RightUpperArm", "LeftUpperArm", "RightUpperLeg", "LeftUpperLeg"}
     end
 
     local function validateAndReturn(part)
         if part and part:IsA("BasePart") then
-            -- 強制開啟 CanQuery，確保武器射線能打中它，否則 Raycast 回傳 nil 會導致後端 UI 崩潰！
+            -- 強制開啟 CanQuery，確保武器射線能打中它
             if not part.CanQuery then
                 pcall(function() part.CanQuery = true end)
             end
@@ -808,8 +779,7 @@ local function getSmartTargetPart(character)
         end
     end
     
-    -- 如果全被擋住，退回優先 Hitbox (給穿牆用)，否則給 Head
-    if primaryHitbox then return validateAndReturn(primaryHitbox) end
+    -- 如果全被擋住，優先給 Head，否則 UpperTorso
     return validateAndReturn(character:FindFirstChild(Settings.AimbotTarget ~= "Auto (AI)" and Settings.AimbotTarget or "Head") or character:FindFirstChild("UpperTorso"))
 end
 
