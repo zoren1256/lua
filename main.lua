@@ -1072,32 +1072,31 @@ local successMT, errMT = pcall(function()
         if Toggles.MagicBullet and IsShooting and not checkcaller() then
             local targetPart = CachedMagicBulletTargetPart
             if targetPart then
-                if self == Workspace and method == "Raycast" then
-                    local origin = args[1]
-                    local direction = args[2]
-                    -- 攔截射擊射線
-                    if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
-                        -- 【真・穿牆黑科技 (Origin Spoofing)】
-                        -- 既然伺服器或本地會判定撞牆，那我們就不從槍口發射了！
-                        -- 直接把子彈的「發射起點」瞬間轉移到敵人臉上 0.5 Studs 的距離，完全跳過中間所有的牆壁！
-                        local newDirection = (targetPart.Position - origin).Unit * 1000
-                        local fakeOrigin = targetPart.Position - (newDirection.Unit * 0.5)
-                        
-                        args[1] = fakeOrigin
-                        args[2] = newDirection
-                        
-                        return oldNamecall(self, unpack(args))
+                -- 【終極黑科技：傷害封包欺騙 (Damage Packet Spoofing)】
+                -- 完全放棄修改本地射線 (Raycast)，讓遊戲以為我們正常開槍打中牆壁，防止 UI 崩潰。
+                -- 當遊戲準備發送網路封包 (FireServer) 告訴伺服器我們打中牆壁時，
+                -- 我們瞬間攔截這個封包，並把封包裡面的「被擊中目標」竄改成敵人的頭部！
+                if method == "FireServer" or method == "InvokeServer" then
+                    -- 為了保證通用性，我們遍歷封包裡面的所有參數
+                    for i, arg in pairs(args) do
+                        -- 假設封包長這樣：FireServer(牆壁零件, 撞擊座標)
+                        -- 我們把它竄改成：FireServer(敵人的頭, 敵人頭的座標)
+                        if typeof(arg) == "Instance" and arg:IsA("BasePart") then
+                            args[i] = targetPart
+                        elseif typeof(arg) == "Vector3" then
+                            args[i] = targetPart.Position
+                        elseif type(arg) == "table" then
+                            -- 有些遊戲會把資料包在 table 裡，我們也一併處理
+                            for k, v in pairs(arg) do
+                                if typeof(v) == "Instance" and v:IsA("BasePart") then
+                                    arg[k] = targetPart
+                                elseif typeof(v) == "Vector3" then
+                                    arg[k] = targetPart.Position
+                                end
+                            end
+                        end
                     end
-                elseif self == Workspace and (method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay") then
-                    local origin = args[1].Origin
-                    local direction = args[1].Direction
-                    if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
-                        local newDirection = (targetPart.Position - origin).Unit * 1000
-                        local fakeOrigin = targetPart.Position - (newDirection.Unit * 0.5)
-                        
-                        args[1] = Ray.new(fakeOrigin, newDirection)
-                        return oldNamecall(self, unpack(args))
-                    end
+                    return oldNamecall(self, unpack(args))
                 end
             end
         end
