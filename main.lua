@@ -1108,9 +1108,19 @@ local successMT, errMT = pcall(function()
     mt.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
         
-        if Toggles.MagicBullet and IsShooting then
-            -- 【純淨版 UE Raycast 靜默穿牆】
-            if method == "Raycast" and self == Workspace then
+        if Toggles.MagicBullet and IsShooting and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
+            -- 核心防禦：如果呼叫這條射線的腳本是 UI 或第一人稱模組，絕對不要攔截！
+            -- 這是為了解決大廳點擊按鈕，或是 ClientViewModel 檢測槍管撞牆時引發的 pairs 崩潰！
+            local caller = getcallingscript and getcallingscript() or nil
+            local isSafe = true
+            if caller and typeof(caller) == "Instance" then
+                local cName = caller.Name
+                if cName == "ClientViewModel" or cName == "UIShinyTexts" or cName == "GameComponentsController" or cName == "Details" then
+                    isSafe = false
+                end
+            end
+
+            if isSafe and method == "Raycast" and self == Workspace then
                 local targetPart = CachedMagicBulletTargetPart
                 if targetPart and targetPart.Parent then
                     local origin = select(1, ...)
@@ -1118,10 +1128,6 @@ local successMT, errMT = pcall(function()
                     local params = select(3, ...)
                     
                     if typeof(origin) == "Vector3" and typeof(direction) == "Vector3" then
-                        -- 核心防禦：過濾掉短距離射線！
-                        -- 遊戲中的武器模組 (ClientViewModel) 會發射短射線來檢測槍管是否撞牆。
-                        -- 如果我們攔截了這些短射線，就會導致 ClientViewModel 崩潰！
-                        -- 真正的子彈射線通常長度超過 1000 studs，因此我們只攔截長度 > 100 的射線。
                         if direction.Magnitude > 100 then
                             local toTarget = (targetPart.Position - origin)
                             
@@ -1132,23 +1138,12 @@ local successMT, errMT = pcall(function()
                             local angle = math.acos(dotProduct)
                             
                             if math.deg(angle) < 60 then
-                                local newDirection = tUnit * (toTarget.Magnitude + 5)
-                                
-                                local newParams = RaycastParams.new()
-                                newParams.FilterType = Enum.RaycastFilterType.Include
-                                newParams.FilterDescendantsInstances = {targetPart} -- 絕對獨佔：只允許打中合法的 Hitbox，禁止打中會導致崩潰的配件或 HRP
-                                newParams.IgnoreWater = true
-                                
-                                -- 繼承原版射線的碰撞群組 (CollisionGroup)！
-                                if params then
-                                    pcall(function()
-                                        newParams.CollisionGroup = params.CollisionGroup
-                                        newParams.RespectCanCollide = params.RespectCanCollide
-                                    end)
-                                end
+                                -- 【終極解法：起點瞬移 (Teleport Origin)】
+                                local newOrigin = targetPart.Position - (tUnit * 2)
+                                local newDirection = tUnit * 100
                                 
                                 if setnamecallmethod then pcall(setnamecallmethod, "Raycast") end
-                                return oldNamecall(self, origin, newDirection, newParams)
+                                return oldNamecall(self, newOrigin, newDirection, params)
                             end
                         end
                     end
