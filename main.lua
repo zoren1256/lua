@@ -734,29 +734,39 @@ end
 
 -- 動態智能部位鎖定 (AI Smart Hitbox)
 local function getSmartTargetPart(character)
-    if not character then return nil end
-    
-    -- 絕對核心：只能鎖定具有「材質數據 (Material)」且能「映射到 Hitbox」的視覺部位。
-    -- 千萬不能鎖定 Hitboxes 內部零件 (無材質，導致 ClientViewModel 崩潰)
-    -- 千萬不能鎖定 HumanoidRootPart 或 配件 (無映射，導致 UIShinyTexts 崩潰)
-    local head = character:FindFirstChild("Head")
-    local upperTorso = character:FindFirstChild("UpperTorso")
-    local lowerTorso = character:FindFirstChild("LowerTorso")
-    
-    local function validateAndReturn(part)
-        if part and typeof(part) == "Instance" and part:IsA("BasePart") then
-            return part
-        end
-        return nil
+    local Camera = Workspace.CurrentCamera
+    if not Camera then return nil end
+    local raycastParams = RaycastParams.new()
+    local filterList = {LocalPlayer.Character, Camera, Workspace.Terrain}
+    if Workspace:FindFirstChild("ZRNSnowPart") then table.insert(filterList, Workspace.ZRNSnowPart) end
+    raycastParams.FilterDescendantsInstances = filterList
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+    raycastParams.IgnoreWater = true
+
+    local partsToScan = {}
+    -- 優先掃描使用者選擇的部位
+    if Settings.AimbotTarget ~= "Auto (AI)" then
+        table.insert(partsToScan, Settings.AimbotTarget)
+    else
+        -- AI 模式：按優先級掃描全身
+        partsToScan = {"Head", "UpperTorso", "LowerTorso", "RightUpperArm", "LeftUpperArm", "RightUpperLeg", "LeftUpperLeg", "HumanoidRootPart"}
     end
 
-    if Settings.AimbotTarget == "Head" then
-        return validateAndReturn(head)
-    elseif Settings.AimbotTarget == "Torso" then
-        return validateAndReturn(upperTorso) or validateAndReturn(lowerTorso)
+    for _, partName in ipairs(partsToScan) do
+        local part = character:FindFirstChild(partName)
+        if part then
+            local origin = Camera.CFrame.Position
+            local direction = (part.Position - origin)
+            local result = Workspace:Raycast(origin, direction, raycastParams)
+            -- 如果沒打到東西（完全沒遮蔽），或者打到的東西屬於這個敵人
+            if not result or (result.Instance and result.Instance:IsDescendantOf(character)) then
+                return part
+            end
+        end
     end
     
-    return validateAndReturn(head) or validateAndReturn(upperTorso) or validateAndReturn(lowerTorso)
+    -- 如果全被擋住，退回預設鎖定點 (可能搭配穿牆子彈使用)
+    return character:FindFirstChild(Settings.AimbotTarget ~= "Auto (AI)" and Settings.AimbotTarget or "HumanoidRootPart")
 end
 
 -- 取得最近的目標
@@ -819,40 +829,70 @@ local function createESP(player)
             local hum = character:WaitForChild("Humanoid", 5)
             if not head or not hrp or not hum then return end
 
-            -- 核心修復：絕對不能把 ESP 放進 character 裡！
-            local espFolder = Instance.new("Folder")
-            espFolder.Name = "ZRN_ESP_" .. player.Name
-            
-            local success, err = pcall(function()
-                local targetParent = nil
-                if gethui then
-                    targetParent = gethui()
-                else
-                    targetParent = game:GetService("CoreGui")
+        local targetParent = gethui and gethui() or CoreGui
+        local mainESPFolder = targetParent:FindFirstChild("ZRN_Rivals_ESP_Container")
+        if not mainESPFolder then
+            mainESPFolder = Instance.new("Folder")
+            mainESPFolder.Name = "ZRN_Rivals_ESP_Container"
+            mainESPFolder.Parent = targetParent
+        end
+        
+        local espFolderName = "ESP_" .. player.Name
+        if mainESPFolder:FindFirstChild(espFolderName) then
+            mainESPFolder[espFolderName]:Destroy()
+        end
+
+        local espFolder = Instance.new("Folder")
+        espFolder.Name = espFolderName
+        espFolder.Parent = mainESPFolder
+
+        -- 名字與血量
+        local billboard = Instance.new("BillboardGui")
+        billboard.Parent = espFolder
+        billboard.Adornee = head
+        billboard.Size = UDim2.new(0, 100, 0, 50)
+        billboard.StudsOffset = Vector3.new(0, 2, 0)
+        billboard.AlwaysOnTop = true
+
+        local textLabel = Instance.new("TextLabel")
+        textLabel.Parent = billboard
+        textLabel.BackgroundTransparency = 1
+        textLabel.Size = UDim2.new(1, 0, 1, 0)
+        textLabel.Font = Enum.Font.GothamBold
+        textLabel.TextSize = 12
+        textLabel.TextColor3 = Theme.MainColor
+        textLabel.TextStrokeTransparency = 0
+        textLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+
+        local originalSizes = {}
+
+        -- 判定區擴大 (Hitbox Expander)
+        local function updateHitbox()
+            if Toggles.HitboxExpander then
+                local target = character:FindFirstChild(Settings.AimbotTarget) or character:FindFirstChild("HumanoidRootPart")
+                if target then
+                    if not originalSizes[target] then
+                        originalSizes[target] = target.Size
+                    end
+                    target.Size = Vector3.new(Settings.HitboxSize, Settings.HitboxSize, Settings.HitboxSize)
+                    target.Transparency = 0.5
+                    target.CanCollide = false
                 end
-                espFolder.Parent = targetParent
-            end)
-            
-            if not success or not espFolder.Parent then
-                espFolder.Parent = LocalPlayer:WaitForChild("PlayerGui")
+            else
+                -- 還原原始大小
+                for part, origSize in pairs(originalSizes) do
+                    if part and part.Parent then
+                        part.Size = origSize
+                        if part.Name == "HumanoidRootPart" then
+                            part.Transparency = 1
+                        else
+                            part.Transparency = 0
+                        end
+                    end
+                end
+                table.clear(originalSizes)
             end
-
-            local billboard = Instance.new("BillboardGui")
-            billboard.Parent = espFolder
-            billboard.Adornee = head
-            billboard.Size = UDim2.new(0, 100, 0, 50)
-            billboard.StudsOffset = Vector3.new(0, 2, 0)
-            billboard.AlwaysOnTop = true
-
-            local textLabel = Instance.new("TextLabel")
-            textLabel.Parent = billboard
-            textLabel.BackgroundTransparency = 1
-            textLabel.Size = UDim2.new(1, 0, 1, 0)
-            textLabel.Font = Enum.Font.GothamBold
-            textLabel.TextSize = 12
-            textLabel.TextColor3 = Theme.MainColor
-            textLabel.TextStrokeTransparency = 0
-            textLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+        end
 
         -- 渲染更新迴圈
         local conn
@@ -896,6 +936,9 @@ local function createESP(player)
                         espFolder.BoxHighlight:Destroy()
                     end
                 end
+
+                -- 更新判定區
+                updateHitbox()
             end)
         end)
         end)
@@ -1014,16 +1057,8 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
-
-
-
 --------------------------------------------------------------------------------
--- 靜默追蹤 (子彈追蹤轉向)
---------------------------------------------------------------------------------
-
-
---------------------------------------------------------------------------------
--- 靜默追蹤 (終極方案：封包攔截與重寫 Packet Manipulation)
+-- 靜默追蹤
 --------------------------------------------------------------------------------
 local successMT, errMT = pcall(function()
     local mt = getrawmetatable(game)
@@ -1034,37 +1069,34 @@ local successMT, errMT = pcall(function()
         local method = getnamecallmethod()
         local args = {...}
 
-        -- 當我們開啟靜默追蹤時，我們不改遊戲物理射線，我們直接改「送給伺服器的傷害封包」！
-        -- 第一步：找出 Rivals 是用哪一個 Remote 來判定傷害的
-        if Toggles.MagicBullet then
-            if method == "FireServer" or method == "InvokeServer" then
-                -- 過濾掉常見的無關封包，例如移動、滑鼠更新
-                local remoteName = tostring(self.Name)
-                if not string.find(remoteName, "Move") and not string.find(remoteName, "Mouse") and not string.find(remoteName, "Update") then
-                    -- 檢查參數裡有沒有包含 Character 或 Part
-                    for i, arg in pairs(args) do
-                        if typeof(arg) == "Instance" and (arg:IsA("Model") or arg:IsA("BasePart")) then
-                            print("[ZRN Logger] 發送疑似傷害封包: ", remoteName)
-                            print("參數 " .. i .. " :", arg)
-                        end
-                        -- 檢查參數有沒有 Vector3 (通常是擊中座標)
-                        if typeof(arg) == "Vector3" then
-                            print("參數 " .. i .. " 座標:", arg)
-                        end
-                        -- 檢查 table 參數 (Rivals 可能把資料包裝在 table 裡)
-                        if type(arg) == "table" then
-                            for k, v in pairs(arg) do
-                                if typeof(v) == "Instance" and (v:IsA("Model") or v:IsA("BasePart")) then
-                                    print("[ZRN Logger] Table內含物件: ", remoteName, "[", k, "] = ", v)
-                                end
-                            end
-                        end
+        if Toggles.MagicBullet and IsShooting and not checkcaller() then
+            local targetPart = CachedMagicBulletTargetPart
+            if targetPart then
+                if self == Workspace and method == "Raycast" then
+                    local origin = args[1]
+                    local direction = args[2]
+                    -- 攔截射擊射線
+                    if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
+                        -- 極簡暴力解法：保持原點 (Origin) 不變以繞過反作弊原點檢查，
+                        -- 直接將射線方向 (Direction) 強制鎖死指向敵人的部位。
+                        local newDirection = (targetPart.Position - origin).Unit * 1000
+                        args[2] = newDirection
+                        
+                        return oldNamecall(self, unpack(args))
+                    end
+                elseif self == Workspace and (method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay") then
+                    local origin = args[1].Origin
+                    local direction = args[1].Direction
+                    if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
+                        local newDirection = (targetPart.Position - origin).Unit * 1000
+                        args[1] = Ray.new(origin, newDirection)
+                        
+                        return oldNamecall(self, unpack(args))
                     end
                 end
             end
         end
 
-        if setnamecallmethod then pcall(setnamecallmethod, method) end
         return oldNamecall(self, ...)
     end)
 
@@ -1085,7 +1117,7 @@ local CombatTab = Window:CreateTab("戰鬥")
 
 CombatTab:CreateToggle("啟用自瞄 (右鍵觸發)", false, function(state) Toggles.Aimbot = state end)
 CombatTab:CreateToggle("自動開槍 (TriggerBot)", false, function(state) Toggles.TriggerBot = state end)
-CombatTab:CreateToggle("啟用靜默追蹤 (穿牆)", false, function(state) Toggles.MagicBullet = state end)
+CombatTab:CreateToggle("啟用靜默追蹤", false, function(state) Toggles.MagicBullet = state end)
 CombatTab:CreateToggle("限制鎖定範圍 (FOV)", true, function(state) Settings.AimbotUseFOV = state end)
 CombatTab:CreateToggle("啟用移動預判 (Prediction)", false, function(state) Settings.AimbotPrediction = state end)
 CombatTab:CreateSlider("預判強度 (數字越大越往前)", 0, 20, 5, function(val) Settings.PredictionAmount = val / 100 end)
@@ -1094,6 +1126,10 @@ CombatTab:CreateToggle("顯示鎖定範圍", false, function(state) Toggles.Show
 CombatTab:CreateSlider("鎖定範圍大小", 10, 500, 100, function(val) Settings.AimbotFOV = val end)
 CombatTab:CreateSlider("自瞄平滑度 (越大越慢)", 1, 20, 1, function(val) Settings.AimbotSmoothness = val end)
 CombatTab:CreateDropdown("自瞄部位", {"Auto (AI)", "Head", "HumanoidRootPart"}, "Auto (AI)", function(val) Settings.AimbotTarget = val end)
+
+CombatTab:CreateToggle("啟用判定區擴大", false, function(state) Toggles.HitboxExpander = state end)
+CombatTab:CreateSlider("判定區大小", 2, 20, 5, function(val) Settings.HitboxSize = val end)
+
 
 -- 視覺分頁
 local VisualTab = Window:CreateTab("視覺")
