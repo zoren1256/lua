@@ -1136,12 +1136,10 @@ local successMT, errMT = pcall(function()
                                 
                                 local newParams = RaycastParams.new()
                                 newParams.FilterType = Enum.RaycastFilterType.Include
-                                newParams.FilterDescendantsInstances = {targetPart.Parent} -- 包含整個敵人，讓 CollisionGroup 決定打中哪個部位
+                                newParams.FilterDescendantsInstances = {targetPart} -- 絕對獨佔：只允許打中合法的 Hitbox，禁止打中會導致崩潰的配件或 HRP
                                 newParams.IgnoreWater = true
                                 
                                 -- 繼承原版射線的碰撞群組 (CollisionGroup)！
-                                -- Rivals 原生子彈有特定的 CollisionGroup，這決定了子彈會穿過視覺模型並打中 Hitbox。
-                                -- 如果丟失這個屬性，就會打錯部位導致 UIShinyTexts 崩潰！
                                 if params then
                                     pcall(function()
                                         newParams.CollisionGroup = params.CollisionGroup
