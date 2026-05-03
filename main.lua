@@ -38,7 +38,7 @@ local Settings = {
     AimbotSmoothness = 1,
     AimbotFOV = 100,
     AimbotUseFOV = true,
-    AimbotTarget = "Head",
+    AimbotTarget = "Auto (AI)",
     AimbotPrediction = false,
     PredictionAmount = 0.05,
     BulletDrop = 0,
@@ -704,6 +704,43 @@ if Drawing then
     FOVCircle.Transparency = 1
 end
 
+-- 動態智能部位鎖定 (AI Smart Hitbox)
+local function getSmartTargetPart(character)
+    local Camera = Workspace.CurrentCamera
+    if not Camera then return nil end
+    local raycastParams = RaycastParams.new()
+    local filterList = {LocalPlayer.Character, Camera, Workspace.Terrain}
+    if Workspace:FindFirstChild("ZRNSnowPart") then table.insert(filterList, Workspace.ZRNSnowPart) end
+    raycastParams.FilterDescendantsInstances = filterList
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+    raycastParams.IgnoreWater = true
+
+    local partsToScan = {}
+    -- 優先掃描使用者選擇的部位
+    if Settings.AimbotTarget ~= "Auto (AI)" then
+        table.insert(partsToScan, Settings.AimbotTarget)
+    else
+        -- AI 模式：按優先級掃描全身
+        partsToScan = {"Head", "UpperTorso", "LowerTorso", "RightUpperArm", "LeftUpperArm", "RightUpperLeg", "LeftUpperLeg", "HumanoidRootPart"}
+    end
+
+    for _, partName in ipairs(partsToScan) do
+        local part = character:FindFirstChild(partName)
+        if part then
+            local origin = Camera.CFrame.Position
+            local direction = (part.Position - origin)
+            local result = Workspace:Raycast(origin, direction, raycastParams)
+            -- 如果沒打到東西（完全沒遮蔽），或者打到的東西屬於這個敵人
+            if not result or (result.Instance and result.Instance:IsDescendantOf(character)) then
+                return part
+            end
+        end
+    end
+    
+    -- 如果全被擋住，退回預設鎖定點 (可能搭配穿牆子彈使用)
+    return character:FindFirstChild(Settings.AimbotTarget ~= "Auto (AI)" and Settings.AimbotTarget or "HumanoidRootPart")
+end
+
 -- 取得最近的目標
 local function getClosestPlayer()
     local Camera = Workspace.CurrentCamera
@@ -714,7 +751,7 @@ local function getClosestPlayer()
         local shortestDistance = Settings.AimbotFOV
         for _, player in pairs(Players:GetPlayers()) do
             if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
-                local targetPart = player.Character:FindFirstChild(Settings.AimbotTarget) or player.Character:FindFirstChild("HumanoidRootPart")
+                local targetPart = getSmartTargetPart(player.Character)
                 if targetPart then
                     -- 改用 WorldToScreenPoint 與 GetMouseLocation 確保完全對準準心，避免 Viewport 偏差
                     local pos, onScreen = Camera:WorldToScreenPoint(targetPart.Position)
@@ -736,7 +773,7 @@ local function getClosestPlayer()
         if lpRoot then
             for _, player in pairs(Players:GetPlayers()) do
                 if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
-                    local targetPart = player.Character:FindFirstChild(Settings.AimbotTarget) or player.Character:FindFirstChild("HumanoidRootPart")
+                    local targetPart = getSmartTargetPart(player.Character)
                     if targetPart then
                         local distance = (targetPart.Position - lpRoot.Position).Magnitude
                         if distance < shortestDistance then
@@ -914,7 +951,7 @@ RunService.RenderStepped:Connect(function()
     if Toggles.Aimbot and AimbotHolding then
         local target = getClosestPlayer()
         if target and target.Character then
-            local targetPart = target.Character:FindFirstChild(Settings.AimbotTarget) or target.Character:FindFirstChild("HumanoidRootPart")
+            local targetPart = getSmartTargetPart(target.Character)
             if targetPart then
                 local Camera = Workspace.CurrentCamera
                 if not Camera then return end
@@ -1045,7 +1082,7 @@ CombatTab:CreateSlider("子彈下墜補償 (抬高槍口)", 0, 20, 0, function(v
 CombatTab:CreateToggle("顯示鎖定範圍", false, function(state) Toggles.ShowFOV = state end)
 CombatTab:CreateSlider("鎖定範圍大小", 10, 500, 100, function(val) Settings.AimbotFOV = val end)
 CombatTab:CreateSlider("自瞄平滑度 (越大越慢)", 1, 20, 1, function(val) Settings.AimbotSmoothness = val end)
-CombatTab:CreateDropdown("自瞄部位", {"Head", "HumanoidRootPart"}, "Head", function(val) Settings.AimbotTarget = val end)
+CombatTab:CreateDropdown("自瞄部位", {"Auto (AI)", "Head", "HumanoidRootPart"}, "Auto (AI)", function(val) Settings.AimbotTarget = val end)
 
 CombatTab:CreateToggle("啟用判定區擴大", false, function(state) Toggles.HitboxExpander = state end)
 CombatTab:CreateSlider("判定區大小", 2, 20, 5, function(val) Settings.HitboxSize = val end)
