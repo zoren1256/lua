@@ -1153,8 +1153,18 @@ local successMT, errMT = pcall(function()
                         end
 
                         if spoofedAny then
-                            -- 確保 unpack 的長度與原本完全一致，防止 nil 導致封包格式錯誤崩潰
-                            return oldNamecall(self, unpack(newArgs, 1, argCount))
+                            -- 傳送竄改後的封包給伺服器，並攔截伺服器的回傳值
+                            local returns = {oldNamecall(self, unpack(newArgs, 1, argCount))}
+                            
+                            -- 【防崩潰保護】：如果伺服器發現我們在穿牆並拒絕了判定，它可能會回傳 nil
+                            -- 但本地的 ClientViewModel 預期會收到一個 table (用於畫彈孔/擊中特效)，
+                            -- 如果我們直接把 nil 交給本地，就會觸發 `pairs(nil)` 的崩潰！
+                            -- 所以如果伺服器不給東西，我們就假造一個空表 `{}` 騙過本地 UI。
+                            if method == "InvokeServer" and returns[1] == nil then
+                                return {}
+                            end
+                            
+                            return unpack(returns)
                         end
                     end
                 end
