@@ -1099,10 +1099,23 @@ local successMT, errMT = pcall(function()
     local oldIndex = mt.__index
     setreadonly(mt, false)
 
+    local function isSafeCaller()
+        if checkcaller() then return false end
+        local caller = getcallingscript()
+        if caller then
+            local fullName = caller:GetFullName()
+            -- 絕對不干涉任何 UI 或遊戲組件的渲染腳本，避免產生 Inset/Details 等 UI 崩潰
+            if fullName:find("UserInterface") or fullName:find("GameComponents") or fullName:find("PlayerList") or fullName:find("GUI") then
+                return false
+            end
+        end
+        return true
+    end
+
     mt.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
         
-        if Toggles.MagicBullet and IsShooting and not checkcaller() then
+        if Toggles.MagicBullet and IsShooting and isSafeCaller() then
             local targetPart = CachedMagicBulletTargetPart
             if targetPart and targetPart.Parent then
                 -- 【實體穿牆核心 (UE Raycast Bypass)】
@@ -1111,17 +1124,13 @@ local successMT, errMT = pcall(function()
                     local direction = select(2, ...)
                     local params = select(3, ...)
                     
-                    -- 如果射線方向大約朝向我們的目標，我們就強制修正它
                     local toTarget = (targetPart.Position - origin)
                     local angle = math.acos(direction.Unit:Dot(toTarget.Unit))
                     if math.deg(angle) < 45 then
-                        -- 把射線長度延長到剛好穿透目標
                         local newDirection = toTarget.Unit * (toTarget.Magnitude + 2)
                         
-                        -- 確保穿牆用的射線不被牆壁擋住，我們使用 Include 模式只鎖定目標
                         local newParams = RaycastParams.new()
                         newParams.FilterType = Enum.RaycastFilterType.Include
-                        -- 注意：我們現在鎖定的是真正的 Hitbox 或是整個 Character，這樣遊戲就不會回報 nil
                         newParams.FilterDescendantsInstances = {targetPart.Parent, targetPart}
                         newParams.IgnoreWater = true
                         
@@ -1143,7 +1152,7 @@ local successMT, errMT = pcall(function()
     end)
 
     mt.__index = newcclosure(function(self, key)
-        if Toggles.MagicBullet and IsShooting and not checkcaller() then
+        if Toggles.MagicBullet and IsShooting and isSafeCaller() then
             local targetPart = CachedMagicBulletTargetPart
             if targetPart and targetPart.Parent then
                 if self:IsA("Mouse") then
