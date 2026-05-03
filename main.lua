@@ -81,7 +81,14 @@ local function CreateSnow()
     
     local Lighting = game:GetService("Lighting")
     
-    -- 強制移除遊戲本身的 Skybox，否則大晴天的天空盒會蓋過霧氣
+    -- 嘗試使用最原生的 Fast Flag 來讓天空變灰 (如果修改器支援)
+    pcall(function()
+        if setfflag then
+            setfflag("DebugSkyGray", "True")
+        end
+    end)
+    
+    -- 強制移除遊戲本身的 Skybox，以防 FFlag 沒生效
     local function removeSky()
         for _, v in pairs(Lighting:GetChildren()) do
             if v:IsA("Sky") then v:Destroy() end
@@ -92,7 +99,7 @@ local function CreateSnow()
         if v:IsA("Sky") then task.wait() v:Destroy() end
     end)
     
-    -- 加入冷色調濾鏡
+    -- 加入冷色調濾鏡 (保留雪天的冷峻氛圍)
     local colorCorrection = Lighting:FindFirstChild("ZRNSnowColorCorrection")
     if not colorCorrection then
         colorCorrection = Instance.new("ColorCorrectionEffect")
@@ -111,9 +118,8 @@ local function CreateSnow()
             Lighting.ColorShift_Top = Color3.fromRGB(100, 110, 120)
             Lighting.ColorShift_Bottom = Color3.fromRGB(100, 110, 120)
             
-            -- 核心：透過濾鏡把整個遊戲畫面變成冬天陰暗感
-            colorCorrection.Saturation = -0.4 -- 降低鮮豔度 (變灰)
-            colorCorrection.TintColor = Color3.fromRGB(220, 230, 255) -- 套上微微的藍灰色冷光
+            colorCorrection.Saturation = -0.4
+            colorCorrection.TintColor = Color3.fromRGB(220, 230, 255)
             colorCorrection.Brightness = -0.1
             
             local atmo = Lighting:FindFirstChildOfClass("Atmosphere")
