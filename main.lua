@@ -866,31 +866,40 @@ local function createESP(player)
 
         local originalSizes = {}
 
-        -- 判定區擴大 (Hitbox Expander)
+        -- 判定區擴大 (Hitbox Expander) / 隱形穿牆領域 (Magic Bullet)
         local function updateHitbox()
-            if Toggles.HitboxExpander then
-                local target = character:FindFirstChild(Settings.AimbotTarget) or character:FindFirstChild("HumanoidRootPart")
-                if target then
+            local target = character:FindFirstChild(Settings.AimbotTarget) or character:FindFirstChild("HumanoidRootPart")
+            if target then
+                if Toggles.MagicBullet and CachedMagicBulletTargetPart and CachedMagicBulletTargetPart.Parent == character then
+                    -- 【終極物理穿牆 (Dynamic Invisible Hitbox)】
+                    -- 將敵人的頭部放大到 60x60x60，這樣巨大的頭部會直接穿透掩體和牆壁。
+                    -- 當我們開槍時，遊戲原生的射線會打在這個隱形的大頭上，完美達成穿牆且絕對不會報錯！
+                    if not originalSizes[target] then
+                        originalSizes[target] = target.Size
+                    end
+                    target.Size = Vector3.new(60, 60, 60)
+                    target.Transparency = 1 -- 必須是隱形的，才不會滿畫面都是方塊
+                    target.CanCollide = false
+                elseif Toggles.HitboxExpander then
+                    -- 普通的 Hitbox 擴大
                     if not originalSizes[target] then
                         originalSizes[target] = target.Size
                     end
                     target.Size = Vector3.new(Settings.HitboxSize, Settings.HitboxSize, Settings.HitboxSize)
                     target.Transparency = 0.5
                     target.CanCollide = false
-                end
-            else
-                -- 還原原始大小
-                for part, origSize in pairs(originalSizes) do
-                    if part and part.Parent then
-                        part.Size = origSize
-                        if part.Name == "HumanoidRootPart" then
-                            part.Transparency = 1
+                else
+                    -- 還原原始大小
+                    if originalSizes[target] then
+                        target.Size = originalSizes[target]
+                        if target.Name == "HumanoidRootPart" then
+                            target.Transparency = 1
                         else
-                            part.Transparency = 0
+                            target.Transparency = 0
                         end
+                        originalSizes[target] = nil
                     end
                 end
-                table.clear(originalSizes)
             end
         end
 
@@ -1057,8 +1066,9 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
+
 --------------------------------------------------------------------------------
--- 靜默追蹤 (穿牆/無視障礙物)
+-- 靜默追蹤 (子彈追蹤轉向)
 --------------------------------------------------------------------------------
 local successMT, errMT = pcall(function()
     local mt = getrawmetatable(game)
@@ -1072,31 +1082,24 @@ local successMT, errMT = pcall(function()
         if Toggles.MagicBullet and IsShooting and not checkcaller() then
             local targetPart = CachedMagicBulletTargetPart
             if targetPart then
-                -- 【終極黑科技：傷害封包欺騙 (Damage Packet Spoofing)】
-                -- 完全放棄修改本地射線 (Raycast)，讓遊戲以為我們正常開槍打中牆壁，防止 UI 崩潰。
-                -- 當遊戲準備發送網路封包 (FireServer) 告訴伺服器我們打中牆壁時，
-                -- 我們瞬間攔截這個封包，並把封包裡面的「被擊中目標」竄改成敵人的頭部！
-                if method == "FireServer" or method == "InvokeServer" then
-                    -- 為了保證通用性，我們遍歷封包裡面的所有參數
-                    for i, arg in pairs(args) do
-                        -- 假設封包長這樣：FireServer(牆壁零件, 撞擊座標)
-                        -- 我們把它竄改成：FireServer(敵人的頭, 敵人頭的座標)
-                        if typeof(arg) == "Instance" and arg:IsA("BasePart") then
-                            args[i] = targetPart
-                        elseif typeof(arg) == "Vector3" then
-                            args[i] = targetPart.Position
-                        elseif type(arg) == "table" then
-                            -- 有些遊戲會把資料包在 table 裡，我們也一併處理
-                            for k, v in pairs(arg) do
-                                if typeof(v) == "Instance" and v:IsA("BasePart") then
-                                    arg[k] = targetPart
-                                elseif typeof(v) == "Vector3" then
-                                    arg[k] = targetPart.Position
-                                end
-                            end
-                        end
+                if self == Workspace and method == "Raycast" then
+                    local origin = args[1]
+                    local direction = args[2]
+                    -- 攔截射擊射線
+                    if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
+                        -- 【子彈追蹤 (Silent Aim)】：強制將射線方向轉向敵人的頭部
+                        local newDirection = (targetPart.Position - origin).Unit * 1000
+                        args[2] = newDirection
+                        return oldNamecall(self, unpack(args))
                     end
-                    return oldNamecall(self, unpack(args))
+                elseif self == Workspace and (method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay") then
+                    local origin = args[1].Origin
+                    local direction = args[1].Direction
+                    if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
+                        local newDirection = (targetPart.Position - origin).Unit * 1000
+                        args[1] = Ray.new(origin, newDirection)
+                        return oldNamecall(self, unpack(args))
+                    end
                 end
             end
         end
