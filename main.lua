@@ -819,40 +819,40 @@ local function createESP(player)
             local hum = character:WaitForChild("Humanoid", 5)
             if not head or not hrp or not hum then return end
 
-        local targetParent = gethui and gethui() or CoreGui
-        local mainESPFolder = targetParent:FindFirstChild("ZRN_Rivals_ESP_Container")
-        if not mainESPFolder then
-            mainESPFolder = Instance.new("Folder")
-            mainESPFolder.Name = "ZRN_Rivals_ESP_Container"
-            mainESPFolder.Parent = targetParent
-        end
-        
-        local espFolderName = "ESP_" .. player.Name
-        if mainESPFolder:FindFirstChild(espFolderName) then
-            mainESPFolder[espFolderName]:Destroy()
-        end
+            -- 核心修復：絕對不能把 ESP 放進 character 裡！
+            local espFolder = Instance.new("Folder")
+            espFolder.Name = "ZRN_ESP_" .. player.Name
+            
+            local success, err = pcall(function()
+                local targetParent = nil
+                if gethui then
+                    targetParent = gethui()
+                else
+                    targetParent = game:GetService("CoreGui")
+                end
+                espFolder.Parent = targetParent
+            end)
+            
+            if not success or not espFolder.Parent then
+                espFolder.Parent = LocalPlayer:WaitForChild("PlayerGui")
+            end
 
-        local espFolder = Instance.new("Folder")
-        espFolder.Name = espFolderName
-        espFolder.Parent = mainESPFolder
+            local billboard = Instance.new("BillboardGui")
+            billboard.Parent = espFolder
+            billboard.Adornee = head
+            billboard.Size = UDim2.new(0, 100, 0, 50)
+            billboard.StudsOffset = Vector3.new(0, 2, 0)
+            billboard.AlwaysOnTop = true
 
-        -- 名字與血量
-        local billboard = Instance.new("BillboardGui")
-        billboard.Parent = espFolder
-        billboard.Adornee = head
-        billboard.Size = UDim2.new(0, 100, 0, 50)
-        billboard.StudsOffset = Vector3.new(0, 2, 0)
-        billboard.AlwaysOnTop = true
-
-        local textLabel = Instance.new("TextLabel")
-        textLabel.Parent = billboard
-        textLabel.BackgroundTransparency = 1
-        textLabel.Size = UDim2.new(1, 0, 1, 0)
-        textLabel.Font = Enum.Font.GothamBold
-        textLabel.TextSize = 12
-        textLabel.TextColor3 = Theme.MainColor
-        textLabel.TextStrokeTransparency = 0
-        textLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+            local textLabel = Instance.new("TextLabel")
+            textLabel.Parent = billboard
+            textLabel.BackgroundTransparency = 1
+            textLabel.Size = UDim2.new(1, 0, 1, 0)
+            textLabel.Font = Enum.Font.GothamBold
+            textLabel.TextSize = 12
+            textLabel.TextColor3 = Theme.MainColor
+            textLabel.TextStrokeTransparency = 0
+            textLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
 
         -- 渲染更新迴圈
         local conn
