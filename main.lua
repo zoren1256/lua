@@ -1061,117 +1061,84 @@ end)
 --------------------------------------------------------------------------------
 -- 靜默追蹤 (子彈追蹤轉向)
 --------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+-- 武器穿透力安全竄改 (Safe Penetration Spoofing)
+--------------------------------------------------------------------------------
+task.spawn(function()
+    while task.wait(3) do
+        if Toggles.MagicBullet then
+            pcall(function()
+                for _, v in pairs(getgc(true)) do
+                    if type(v) == "table" then
+                        -- 【安全過濾器】：確保我們只修改「武器數據表」，絕不動到 UI 表格！
+                        if rawget(v, "FireRate") or rawget(v, "Ammo") or rawget(v, "Damage") or rawget(v, "ReloadTime") then
+                            if rawget(v, "Penetration") ~= nil and type(rawget(v, "Penetration")) == "number" then
+                                rawset(v, "Penetration", 99999)
+                            end
+                            if rawget(v, "WallPenetration") ~= nil and type(rawget(v, "WallPenetration")) == "number" then
+                                rawset(v, "WallPenetration", 99999)
+                            end
+                            if rawget(v, "Pierce") ~= nil then
+                                if type(rawget(v, "Pierce")) == "number" then
+                                    rawset(v, "Pierce", 99999)
+                                elseif type(rawget(v, "Pierce")) == "boolean" then
+                                    rawset(v, "Pierce", true)
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+--------------------------------------------------------------------------------
+-- 靜默追蹤 (安全輸入欺騙 Input Spoofing)
+--------------------------------------------------------------------------------
 local successMT, errMT = pcall(function()
     local mt = getrawmetatable(game)
     local oldNamecall = mt.__namecall
+    local oldIndex = mt.__index
     setreadonly(mt, false)
 
     mt.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
-        local argCount = select("#", ...)
-
+        
         if Toggles.MagicBullet and IsShooting and not checkcaller() then
             local targetPart = CachedMagicBulletTargetPart
             if targetPart and targetPart.Parent then
-                if method == "FireServer" or method == "InvokeServer" then
-                    -- 【修復 nil 遺失問題：安全封包攔截】
-                    local cameraPos = Workspace.CurrentCamera.CFrame.Position
-                    local hasPart = false
-                    local hasVec = false
-                    
-                    local function scan(t)
-                        for _, v in pairs(t) do
-                            if typeof(v) == "Instance" and v:IsA("BasePart") then hasPart = true end
-                            if typeof(v) == "Vector3" then hasVec = true end
-                            if type(v) == "table" then scan(v) end
-                        end
-                    end
-                    
-                    -- 正確遍歷所有參數，包含中間可能為 nil 的空洞
-                    for i = 1, argCount do
-                        local v = select(i, ...)
-                        if typeof(v) == "Instance" and v:IsA("BasePart") then hasPart = true end
-                        if typeof(v) == "Vector3" then hasVec = true end
-                        if type(v) == "table" then scan(v) end
-                    end
-
-                    if hasPart and hasVec then
-                        local function deepCopyAndSpoof(t)
-                            local newT = {}
-                            local spoofed = false
-                            for k, v in pairs(t) do
-                                if typeof(v) == "Instance" and v:IsA("BasePart") then
-                                    if LocalPlayer.Character and not v:IsDescendantOf(LocalPlayer.Character) then
-                                        newT[k] = targetPart
-                                        spoofed = true
-                                    else
-                                        newT[k] = v
-                                    end
-                                elseif typeof(v) == "Vector3" then
-                                    if (v - cameraPos).Magnitude > 5 then
-                                        newT[k] = targetPart.Position
-                                        spoofed = true
-                                    else
-                                        newT[k] = v
-                                    end
-                                elseif type(v) == "table" then
-                                    local subT, subSpoofed = deepCopyAndSpoof(v)
-                                    newT[k] = subT
-                                    if subSpoofed then spoofed = true end
-                                else
-                                    newT[k] = v
-                                end
-                            end
-                            return newT, spoofed
-                        end
-
-                        local newArgs = {}
-                        local spoofedAny = false
-                        for i = 1, argCount do
-                            local arg = select(i, ...)
-                            if typeof(arg) == "Instance" and arg:IsA("BasePart") then
-                                if LocalPlayer.Character and not arg:IsDescendantOf(LocalPlayer.Character) then
-                                    newArgs[i] = targetPart
-                                    spoofedAny = true
-                                else
-                                    newArgs[i] = arg
-                                end
-                            elseif typeof(arg) == "Vector3" then
-                                if (arg - cameraPos).Magnitude > 5 then
-                                    newArgs[i] = targetPart.Position
-                                    spoofedAny = true
-                                else
-                                    newArgs[i] = arg
-                                end
-                            elseif type(arg) == "table" then
-                                local subT, subSpoofed = deepCopyAndSpoof(arg)
-                                newArgs[i] = subT
-                                if subSpoofed then spoofedAny = true end
-                            else
-                                newArgs[i] = arg
-                            end
-                        end
-
-                        if spoofedAny then
-                            -- 傳送竄改後的封包給伺服器，並攔截伺服器的回傳值
-                            local returns = {oldNamecall(self, unpack(newArgs, 1, argCount))}
-                            
-                            -- 【防崩潰保護】：如果伺服器發現我們在穿牆並拒絕了判定，它可能會回傳 nil
-                            -- 但本地的 ClientViewModel 預期會收到一個 table (用於畫彈孔/擊中特效)，
-                            -- 如果我們直接把 nil 交給本地，就會觸發 `pairs(nil)` 的崩潰！
-                            -- 所以如果伺服器不給東西，我們就假造一個空表 `{}` 騙過本地 UI。
-                            if method == "InvokeServer" and returns[1] == nil then
-                                return {}
-                            end
-                            
-                            return unpack(returns)
-                        end
-                    end
+                -- 【安全輸入端欺騙】：我們不碰物理射線，也不碰伺服器封包！
+                -- 我們直接欺騙遊戲的攝影機，讓遊戲以為你的滑鼠正完美對準敵人的頭。
+                if self == Workspace.CurrentCamera and (method == "ScreenPointToRay" or method == "ViewportPointToRay") then
+                    local originalRay = oldNamecall(self, ...)
+                    local origin = originalRay.Origin
+                    local direction = (targetPart.Position - origin).Unit
+                    return Ray.new(origin, direction)
                 end
             end
         end
 
         return oldNamecall(self, ...)
+    end)
+
+    mt.__index = newcclosure(function(self, key)
+        if Toggles.MagicBullet and IsShooting and not checkcaller() then
+            local targetPart = CachedMagicBulletTargetPart
+            if targetPart and targetPart.Parent then
+                if self:IsA("Mouse") then
+                    if key == "Hit" or key == "hit" then
+                        return targetPart.CFrame
+                    elseif key == "Target" or key == "target" then
+                        return targetPart
+                    elseif key == "UnitRay" then
+                        local origin = Workspace.CurrentCamera.CFrame.Position
+                        return Ray.new(origin, (targetPart.Position - origin).Unit)
+                    end
+                end
+            end
+        end
+        return oldIndex(self, key)
     end)
 
     setreadonly(mt, true)
