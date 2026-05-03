@@ -81,13 +81,7 @@ local function CreateSnow()
     
     local Lighting = game:GetService("Lighting")
     
-    -- 嘗試使用最原生的 Fast Flag 來讓天空變灰 (如果修改器支援)
-    pcall(function()
-        if setfflag then
-            setfflag("FFlagDebugSkyGray", "True")
-        end
-    end)
-    
+
     -- 強制移除遊戲本身的 Skybox，以防 FFlag 沒生效
     local function removeSky()
         for _, v in pairs(Lighting:GetChildren()) do
@@ -984,7 +978,19 @@ UserInputService.InputEnded:Connect(function(input, gpe)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then IsShooting = false end
 end)
 
+local CachedMagicBulletTargetPart = nil
+
 RunService.RenderStepped:Connect(function()
+    -- 穿牆子彈目標快取 (每秒 60 次，取代在 __namecall 中每秒幾萬次的運算)
+    if Toggles.MagicBullet then
+        local target = getClosestPlayer()
+        if target and target.Character then
+            CachedMagicBulletTargetPart = getSmartTargetPart(target.Character)
+        else
+            CachedMagicBulletTargetPart = nil
+        end
+    end
+
     -- 更新 FOV 圓圈，精準對齊真實滑鼠/準心位置
     if FOVCircle then
         FOVCircle.Visible = Toggles.ShowFOV
@@ -1064,36 +1070,28 @@ local successMT, errMT = pcall(function()
         local args = {...}
 
         if Toggles.MagicBullet and IsShooting and not checkcaller() then
-            local target = getClosestPlayer()
-            if target and target.Character then
-                local targetPart = target.Character:FindFirstChild(Settings.AimbotTarget) or target.Character:FindFirstChild("HumanoidRootPart")
-                if targetPart then
-                    if self == Workspace and method == "Raycast" then
-                        local origin = args[1]
-                        local direction = args[2]
-                        -- 攔截射擊射線
-                        if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
-                            local newDirection = (targetPart.Position - origin).Unit * 1000
-                            
-                            -- 穿牆黑科技：將射線發射起點 (Origin) 直接瞬間移動到敵人頭前 2 Stud 的位置
-                            -- 這樣就完全不需要管玩家跟敵人中間隔了幾道牆，子彈會直接在敵人臉上生成並命中
-                            args[1] = targetPart.Position - (newDirection.Unit * 2)
-                            args[2] = newDirection
-                            
-                            return oldNamecall(self, unpack(args))
-                        end
-                    elseif self == Workspace and (method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay") then
-                        local origin = args[1].Origin
-                        local direction = args[1].Direction
-                        if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
-                            local newDirection = (targetPart.Position - origin).Unit * 1000
-                            
-                            -- 同樣的穿牆黑科技
-                            local newOrigin = targetPart.Position - (newDirection.Unit * 2)
-                            args[1] = Ray.new(newOrigin, newDirection)
-                            
-                            return oldNamecall(self, unpack(args))
-                        end
+            local targetPart = CachedMagicBulletTargetPart
+            if targetPart then
+                if self == Workspace and method == "Raycast" then
+                    local origin = args[1]
+                    local direction = args[2]
+                    -- 攔截射擊射線
+                    if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
+                        -- 極簡暴力解法：保持原點 (Origin) 不變以繞過反作弊原點檢查，
+                        -- 直接將射線方向 (Direction) 強制鎖死指向敵人的部位。
+                        local newDirection = (targetPart.Position - origin).Unit * 1000
+                        args[2] = newDirection
+                        
+                        return oldNamecall(self, unpack(args))
+                    end
+                elseif self == Workspace and (method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay") then
+                    local origin = args[1].Origin
+                    local direction = args[1].Direction
+                    if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
+                        local newDirection = (targetPart.Position - origin).Unit * 1000
+                        args[1] = Ray.new(origin, newDirection)
+                        
+                        return oldNamecall(self, unpack(args))
                     end
                 end
             end
