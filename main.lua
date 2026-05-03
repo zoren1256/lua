@@ -866,22 +866,11 @@ local function createESP(player)
 
         local originalSizes = {}
 
-        -- 判定區擴大 (Hitbox Expander) / 隱形穿牆領域 (Magic Bullet)
+        -- 判定區擴大 (Hitbox Expander)
         local function updateHitbox()
             local target = character:FindFirstChild(Settings.AimbotTarget) or character:FindFirstChild("HumanoidRootPart")
             if target then
-                if Toggles.MagicBullet and CachedMagicBulletTargetPart and CachedMagicBulletTargetPart.Parent == character then
-                    -- 【終極物理穿牆 (Dynamic Invisible Hitbox)】
-                    -- 將敵人的頭部放大到 60x60x60，這樣巨大的頭部會直接穿透掩體和牆壁。
-                    -- 當我們開槍時，遊戲原生的射線會打在這個隱形的大頭上，完美達成穿牆且絕對不會報錯！
-                    if not originalSizes[target] then
-                        originalSizes[target] = target.Size
-                    end
-                    target.Size = Vector3.new(60, 60, 60)
-                    target.Transparency = 1 -- 必須是隱形的，才不會滿畫面都是方塊
-                    target.CanCollide = false
-                elseif Toggles.HitboxExpander then
-                    -- 普通的 Hitbox 擴大
+                if Toggles.HitboxExpander then
                     if not originalSizes[target] then
                         originalSizes[target] = target.Size
                     end
@@ -1067,36 +1056,7 @@ RunService.RenderStepped:Connect(function()
 end)
 
 
---------------------------------------------------------------------------------
--- 武器穿透力竄改 (Penetration Spoofing) - 繞過伺服器牆壁驗證
---------------------------------------------------------------------------------
-task.spawn(function()
-    while task.wait(2) do
-        if Toggles.MagicBullet then
-            pcall(function()
-                -- 透過垃圾回收器 (Garbage Collector) 掃描遊戲記憶體中的所有 Table (通常是武器數據模組)
-                for _, v in pairs(getgc(true)) do
-                    if type(v) == "table" then
-                        -- 將所有可能的「穿牆/穿透力」屬性直接鎖死為無限大
-                        if rawget(v, "Penetration") ~= nil and type(rawget(v, "Penetration")) == "number" then
-                            rawset(v, "Penetration", 99999)
-                        end
-                        if rawget(v, "WallPenetration") ~= nil and type(rawget(v, "WallPenetration")) == "number" then
-                            rawset(v, "WallPenetration", 99999)
-                        end
-                        if rawget(v, "Pierce") ~= nil then
-                            if type(rawget(v, "Pierce")) == "number" then
-                                rawset(v, "Pierce", 99999)
-                            elseif type(rawget(v, "Pierce")) == "boolean" then
-                                rawset(v, "Pierce", true)
-                            end
-                        end
-                    end
-                end
-            end)
-        end
-    end
-end)
+
 
 --------------------------------------------------------------------------------
 -- 靜默追蹤 (子彈追蹤轉向)
@@ -1112,41 +1072,50 @@ local successMT, errMT = pcall(function()
 
         if Toggles.MagicBullet and IsShooting and not checkcaller() then
             local targetPart = CachedMagicBulletTargetPart
-            if targetPart then
-                -- 【終極子彈追蹤：輸入端欺騙 (Input Spoofing)】
-                -- 我們不再修改物理射線 (那會導致 UI 崩潰)，而是修改「遊戲讀取滑鼠與鏡頭的瞬間」！
-                -- 讓遊戲以為你的準心正完美對準敵人的頭部，然後讓遊戲自己去發射正常的子彈！
-                if self == Workspace.CurrentCamera and (method == "ScreenPointToRay" or method == "ViewportPointToRay") then
-                    local originalRay = oldNamecall(self, ...)
-                    local origin = originalRay.Origin
-                    local direction = (targetPart.Position - origin).Unit
-                    return Ray.new(origin, direction)
+            if targetPart and targetPart.Parent then
+                if self == Workspace and method == "Raycast" then
+                    local origin = args[1]
+                    local direction = args[2]
+                    local params = args[3]
+                    
+                    -- 【UE 級別過濾器】：確保我們只修改「武器的子彈射線」
+                    -- 武器射線通常非常長，且會自帶 RaycastParams
+                    if typeof(direction) == "Vector3" and direction.Magnitude > 100 and typeof(params) == "RaycastParams" then
+                        
+                        -- 【子彈追蹤 (Silent Aim)】
+                        local newDirection = (targetPart.Position - origin).Unit * 1000
+                        args[2] = newDirection
+                        
+                        -- 【究極穿牆 (UE Wallbang)】
+                        -- 將這條射線的白名單「只設定為敵人」，讓子彈完全無視地圖上的所有牆壁
+                        local newParams = RaycastParams.new()
+                        newParams.FilterType = Enum.RaycastFilterType.Include
+                        newParams.FilterDescendantsInstances = {targetPart.Parent}
+                        newParams.IgnoreWater = true
+                        args[3] = newParams
+                        
+                        return oldNamecall(self, unpack(args))
+                    end
+                elseif self == Workspace and (method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay") then
+                    local ray = args[1]
+                    if typeof(ray) == "Ray" and ray.Direction.Magnitude > 100 then
+                        local origin = ray.Origin
+                        local newDirection = (targetPart.Position - origin).Unit * 1000
+                        
+                        if method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRay" then
+                            -- 強制轉為 Whitelist 以達成穿牆
+                            return Workspace:FindPartOnRayWithWhitelist(Ray.new(origin, newDirection), {targetPart.Parent})
+                        elseif method == "FindPartOnRayWithWhitelist" then
+                            args[1] = Ray.new(origin, newDirection)
+                            args[2] = {targetPart.Parent}
+                            return oldNamecall(self, unpack(args))
+                        end
+                    end
                 end
             end
         end
 
         return oldNamecall(self, ...)
-    end)
-
-    local oldIndex = mt.__index
-    mt.__index = newcclosure(function(self, key)
-        if Toggles.MagicBullet and IsShooting and not checkcaller() then
-            local targetPart = CachedMagicBulletTargetPart
-            if targetPart then
-                -- 如果遊戲是透過讀取滑鼠的三維座標來決定開火方向
-                if self:IsA("Mouse") then
-                    if key == "Hit" or key == "hit" then
-                        return targetPart.CFrame
-                    elseif key == "Target" or key == "target" then
-                        return targetPart
-                    elseif key == "UnitRay" then
-                        local origin = Workspace.CurrentCamera.CFrame.Position
-                        return Ray.new(origin, (targetPart.Position - origin).Unit)
-                    end
-                end
-            end
-        end
-        return oldIndex(self, key)
     end)
 
     setreadonly(mt, true)
