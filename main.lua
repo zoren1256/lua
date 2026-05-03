@@ -84,7 +84,7 @@ local function CreateSnow()
     -- 嘗試使用最原生的 Fast Flag 來讓天空變灰 (如果修改器支援)
     pcall(function()
         if setfflag then
-            setfflag("DebugSkyGray", "True")
+            setfflag("FFlagDebugSkyGray", "True")
         end
     end)
     
