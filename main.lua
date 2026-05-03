@@ -854,34 +854,6 @@ local function createESP(player)
         textLabel.TextStrokeTransparency = 0
         textLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
 
-        local originalSizes = {}
-
-        -- 判定區擴大 (Hitbox Expander)
-        local function updateHitbox()
-            local target = character:FindFirstChild(Settings.AimbotTarget) or character:FindFirstChild("HumanoidRootPart")
-            if target then
-                if Toggles.HitboxExpander then
-                    if not originalSizes[target] then
-                        originalSizes[target] = target.Size
-                    end
-                    target.Size = Vector3.new(Settings.HitboxSize, Settings.HitboxSize, Settings.HitboxSize)
-                    target.Transparency = 0.5
-                    target.CanCollide = false
-                else
-                    -- 還原原始大小
-                    if originalSizes[target] then
-                        target.Size = originalSizes[target]
-                        if target.Name == "HumanoidRootPart" then
-                            target.Transparency = 1
-                        else
-                            target.Transparency = 0
-                        end
-                        originalSizes[target] = nil
-                    end
-                end
-            end
-        end
-
         -- 渲染更新迴圈
         local conn
         conn = RunService.RenderStepped:Connect(function()
@@ -924,9 +896,6 @@ local function createESP(player)
                         espFolder.BoxHighlight:Destroy()
                     end
                 end
-
-                -- 更新判定區
-                updateHitbox()
             end)
         end)
         end)
@@ -1134,10 +1103,6 @@ CombatTab:CreateToggle("顯示鎖定範圍", false, function(state) Toggles.Show
 CombatTab:CreateSlider("鎖定範圍大小", 10, 500, 100, function(val) Settings.AimbotFOV = val end)
 CombatTab:CreateSlider("自瞄平滑度 (越大越慢)", 1, 20, 1, function(val) Settings.AimbotSmoothness = val end)
 CombatTab:CreateDropdown("自瞄部位", {"Auto (AI)", "Head", "HumanoidRootPart"}, "Auto (AI)", function(val) Settings.AimbotTarget = val end)
-
-CombatTab:CreateToggle("啟用判定區擴大", false, function(state) Toggles.HitboxExpander = state end)
-CombatTab:CreateSlider("判定區大小", 2, 20, 5, function(val) Settings.HitboxSize = val end)
-
 
 -- 視覺分頁
 local VisualTab = Window:CreateTab("視覺")
