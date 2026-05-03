@@ -1064,75 +1064,48 @@ local successMT, errMT = pcall(function()
     mt.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
         
+        -- 【靜默自瞄 (Silent Aim)：輸入欺騙】
+        -- 我們不攔截 Workspace:Raycast，因為那會破壞 ClientViewModel 的彈孔判定，導致 table expected 崩潰。
+        -- 我們只欺騙「準心指向」，讓遊戲的武器腳本「以為」你正看著敵人。
+        -- 同時絕對不欺騙 WorldToScreenPoint，避免破壞 UIShinyTexts 的傷害飄字 UI。
         if Toggles.MagicBullet and IsShooting and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
-            -- 核心防禦：如果呼叫這條射線的腳本是 UI 或第一人稱模組，絕對不要攔截！
-            -- 這是為了解決大廳點擊按鈕，或是 ClientViewModel 檢測槍管撞牆時引發的 pairs 崩潰！
-            local caller = getcallingscript and getcallingscript() or nil
-            local isSafe = true
-            if caller and typeof(caller) == "Instance" then
-                local cName = caller.Name
-                if cName == "ClientViewModel" or cName == "UIShinyTexts" or cName == "GameComponentsController" or cName == "Details" then
-                    isSafe = false
-                end
-            end
-
-            if false and isSafe and method == "Raycast" and self == Workspace then
-                local targetPart = CachedMagicBulletTargetPart
-                if targetPart and targetPart.Parent then
-                    local origin = select(1, ...)
-                    local direction = select(2, ...)
-                    local params = select(3, ...)
-                    
-                    if typeof(origin) == "Vector3" and typeof(direction) == "Vector3" then
-                        if direction.Magnitude > 100 then
-                            local toTarget = (targetPart.Position - origin)
-                            
-                            local dUnit = direction.Unit
-                            local tUnit = toTarget.Unit
-                            local dotProduct = (dUnit.X * tUnit.X) + (dUnit.Y * tUnit.Y) + (dUnit.Z * tUnit.Z)
-                            dotProduct = math.clamp(dotProduct, -1, 1)
-                            local angle = math.acos(dotProduct)
-                            
-                            if math.deg(angle) < 60 then
-                                local newDirection = tUnit * (toTarget.Magnitude + 5)
-                                
-                                local newParams = RaycastParams.new()
-                                newParams.FilterType = Enum.RaycastFilterType.Include
-                                newParams.FilterDescendantsInstances = {targetPart}
-                                newParams.IgnoreWater = true
-                                
-                                if params then
-                                    pcall(function()
-                                        newParams.CollisionGroup = params.CollisionGroup
-                                        newParams.RespectCanCollide = params.RespectCanCollide
-                                    end)
-                                end
-                                
-                                if setnamecallmethod then pcall(setnamecallmethod, "Raycast") end
-                                return oldNamecall(self, origin, newDirection, newParams)
-                            end
-                        end
+            local targetPart = CachedMagicBulletTargetPart
+            if targetPart and targetPart.Parent then
+                if self == Mouse then
+                    if method == "Hit" then
+                        return targetPart.CFrame
+                    elseif method == "Target" then
+                        return targetPart
                     end
-                end
-            end
-            
-            -- Packet Logger: 尋找真正的傷害封包
-            if method == "FireServer" or method == "InvokeServer" then
-                if Toggles.MagicBullet then
-                    local args = {...}
-                    -- 過濾掉一些常見的垃圾封包 (例如移動、滑鼠座標、動畫等)
-                    if self.Name ~= "MousePosUpdate" and self.Name ~= "CharacterMove" and self.Name ~= "Ping" then
-                        print("[RIVALS PACKET] Type:", method, " | Name:", self.Name)
-                        for i, v in ipairs(args) do
-                            print("  Arg", i, ":", typeof(v), tostring(v))
-                        end
+                elseif self == Workspace.CurrentCamera then
+                    if method == "ScreenPointToRay" or method == "ViewportPointToRay" then
+                        local origin = self.CFrame.Position
+                        local direction = (targetPart.Position - origin).Unit
+                        return Ray.new(origin, direction)
                     end
                 end
             end
         end
 
+        -- 確保不要把原本的 Raycast 攔截留著
         if setnamecallmethod then pcall(setnamecallmethod, method) end
         return oldNamecall(self, ...)
+    end)
+    
+    -- 攔截 Mouse 的屬性索引 (__index) 以支援 Mouse.Hit
+    local oldIndex = mt.__index
+    mt.__index = newcclosure(function(self, key)
+        if Toggles.MagicBullet and IsShooting and self == Mouse and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
+            local targetPart = CachedMagicBulletTargetPart
+            if targetPart and targetPart.Parent then
+                if key == "Hit" then
+                    return targetPart.CFrame
+                elseif key == "Target" then
+                    return targetPart
+                end
+            end
+        end
+        return oldIndex(self, key)
     end)
 
     setreadonly(mt, true)
