@@ -1073,42 +1073,84 @@ local successMT, errMT = pcall(function()
         if Toggles.MagicBullet and IsShooting and not checkcaller() then
             local targetPart = CachedMagicBulletTargetPart
             if targetPart and targetPart.Parent then
-                if self == Workspace and method == "Raycast" then
-                    local origin = args[1]
-                    local direction = args[2]
-                    local params = args[3]
+                if method == "FireServer" or method == "InvokeServer" then
+                    -- 【終極深層封包欺騙 (Safe Deep Copy Spoofing)】
+                    -- 我們不修改物理射線，讓本地遊戲完美運行，UI 絕對不崩潰。
+                    -- 我們攔截傳送給伺服器的「傷害結算封包」，並複製一份 (Deep Copy) 來竄改。
+                    local cameraPos = Workspace.CurrentCamera.CFrame.Position
+                    local hasPart = false
+                    local hasVec = false
                     
-                    -- 【UE 級別過濾器】：確保我們只修改「武器的子彈射線」
-                    -- 武器射線通常非常長，且會自帶 RaycastParams
-                    if typeof(direction) == "Vector3" and direction.Magnitude > 100 and typeof(params) == "RaycastParams" then
-                        
-                        -- 【子彈追蹤 (Silent Aim)】
-                        local newDirection = (targetPart.Position - origin).Unit * 1000
-                        args[2] = newDirection
-                        
-                        -- 【究極穿牆 (UE Wallbang)】
-                        -- 將這條射線的白名單「只設定為敵人」，讓子彈完全無視地圖上的所有牆壁
-                        local newParams = RaycastParams.new()
-                        newParams.FilterType = Enum.RaycastFilterType.Include
-                        newParams.FilterDescendantsInstances = {targetPart.Parent}
-                        newParams.IgnoreWater = true
-                        args[3] = newParams
-                        
-                        return oldNamecall(self, unpack(args))
+                    -- 檢查特徵：擊中判定封包通常同時包含 BasePart 與 Vector3
+                    local function scan(t)
+                        for _, v in pairs(t) do
+                            if typeof(v) == "Instance" and v:IsA("BasePart") then hasPart = true end
+                            if typeof(v) == "Vector3" then hasVec = true end
+                            if type(v) == "table" then scan(v) end
+                        end
                     end
-                elseif self == Workspace and (method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay") then
-                    local ray = args[1]
-                    if typeof(ray) == "Ray" and ray.Direction.Magnitude > 100 then
-                        local origin = ray.Origin
-                        local newDirection = (targetPart.Position - origin).Unit * 1000
-                        
-                        if method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRay" then
-                            -- 強制轉為 Whitelist 以達成穿牆
-                            return Workspace:FindPartOnRayWithWhitelist(Ray.new(origin, newDirection), {targetPart.Parent})
-                        elseif method == "FindPartOnRayWithWhitelist" then
-                            args[1] = Ray.new(origin, newDirection)
-                            args[2] = {targetPart.Parent}
-                            return oldNamecall(self, unpack(args))
+                    scan(args)
+
+                    if hasPart and hasVec then
+                        local function deepCopyAndSpoof(t)
+                            local newT = {}
+                            local spoofed = false
+                            for k, v in pairs(t) do
+                                if typeof(v) == "Instance" and v:IsA("BasePart") then
+                                    -- 如果零件不是玩家自己的身體/槍枝，就竄改成敵人的頭
+                                    if LocalPlayer.Character and not v:IsDescendantOf(LocalPlayer.Character) then
+                                        newT[k] = targetPart
+                                        spoofed = true
+                                    else
+                                        newT[k] = v
+                                    end
+                                elseif typeof(v) == "Vector3" then
+                                    -- 如果座標離玩家很遠(擊中點)，就竄改成敵人頭的座標
+                                    if (v - cameraPos).Magnitude > 5 then
+                                        newT[k] = targetPart.Position
+                                        spoofed = true
+                                    else
+                                        newT[k] = v
+                                    end
+                                elseif type(v) == "table" then
+                                    local subT, subSpoofed = deepCopyAndSpoof(v)
+                                    newT[k] = subT
+                                    if subSpoofed then spoofed = true end
+                                else
+                                    newT[k] = v
+                                end
+                            end
+                            return newT, spoofed
+                        end
+
+                        local newArgs = {}
+                        local spoofedAny = false
+                        for i, arg in pairs(args) do
+                            if typeof(arg) == "Instance" and arg:IsA("BasePart") then
+                                if LocalPlayer.Character and not arg:IsDescendantOf(LocalPlayer.Character) then
+                                    newArgs[i] = targetPart
+                                    spoofedAny = true
+                                else
+                                    newArgs[i] = arg
+                                end
+                            elseif typeof(arg) == "Vector3" then
+                                if (arg - cameraPos).Magnitude > 5 then
+                                    newArgs[i] = targetPart.Position
+                                    spoofedAny = true
+                                else
+                                    newArgs[i] = arg
+                                end
+                            elseif type(arg) == "table" then
+                                local subT, subSpoofed = deepCopyAndSpoof(arg)
+                                newArgs[i] = subT
+                                if subSpoofed then spoofedAny = true end
+                            else
+                                newArgs[i] = arg
+                            end
+                        end
+
+                        if spoofedAny then
+                            return oldNamecall(self, unpack(newArgs))
                         end
                     end
                 end
