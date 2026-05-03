@@ -792,7 +792,7 @@ local function getSmartTargetPart(character)
 
     for _, partName in ipairs(partsToScan) do
         local part = typeof(partName) == "string" and character:FindFirstChild(partName) or partName
-        if part then
+        if part and part:IsA("BasePart") then
             local origin = Camera.CFrame.Position
             local direction = (part.Position - origin)
             local result = Workspace:Raycast(origin, direction, raycastParams)
