@@ -1118,26 +1118,40 @@ local successMT, errMT = pcall(function()
                     local params = select(3, ...)
                     
                     if typeof(origin) == "Vector3" and typeof(direction) == "Vector3" then
-                        local toTarget = (targetPart.Position - origin)
-                        -- 避免使用任何物件方法 (例如 :Dot 或 .Dot)，純手工計算內積，徹底防止 namecallmethod 暫存器被覆蓋！
-                        local dUnit = direction.Unit
-                        local tUnit = toTarget.Unit
-                        local dotProduct = (dUnit.X * tUnit.X) + (dUnit.Y * tUnit.Y) + (dUnit.Z * tUnit.Z)
-                        -- 確保 dotProduct 在合法範圍內，避免 acos 產生 NaN
-                        dotProduct = math.clamp(dotProduct, -1, 1)
-                        local angle = math.acos(dotProduct)
-                        
-                        if math.deg(angle) < 60 then
-                            local newDirection = tUnit * (toTarget.Magnitude + 5)
+                        -- 核心防禦：過濾掉短距離射線！
+                        -- 遊戲中的武器模組 (ClientViewModel) 會發射短射線來檢測槍管是否撞牆。
+                        -- 如果我們攔截了這些短射線，就會導致 ClientViewModel 崩潰！
+                        -- 真正的子彈射線通常長度超過 1000 studs，因此我們只攔截長度 > 100 的射線。
+                        if direction.Magnitude > 100 then
+                            local toTarget = (targetPart.Position - origin)
                             
-                            local newParams = RaycastParams.new()
-                            newParams.FilterType = Enum.RaycastFilterType.Include
-                            newParams.FilterDescendantsInstances = {targetPart}
-                            newParams.IgnoreWater = true
+                            local dUnit = direction.Unit
+                            local tUnit = toTarget.Unit
+                            local dotProduct = (dUnit.X * tUnit.X) + (dUnit.Y * tUnit.Y) + (dUnit.Z * tUnit.Z)
+                            dotProduct = math.clamp(dotProduct, -1, 1)
+                            local angle = math.acos(dotProduct)
                             
-                            -- 確保以正確的方法呼叫
-                            if setnamecallmethod then pcall(setnamecallmethod, "Raycast") end
-                            return oldNamecall(self, origin, newDirection, newParams)
+                            if math.deg(angle) < 60 then
+                                local newDirection = tUnit * (toTarget.Magnitude + 5)
+                                
+                                local newParams = RaycastParams.new()
+                                newParams.FilterType = Enum.RaycastFilterType.Include
+                                newParams.FilterDescendantsInstances = {targetPart.Parent} -- 包含整個敵人，讓 CollisionGroup 決定打中哪個部位
+                                newParams.IgnoreWater = true
+                                
+                                -- 繼承原版射線的碰撞群組 (CollisionGroup)！
+                                -- Rivals 原生子彈有特定的 CollisionGroup，這決定了子彈會穿過視覺模型並打中 Hitbox。
+                                -- 如果丟失這個屬性，就會打錯部位導致 UIShinyTexts 崩潰！
+                                if params then
+                                    pcall(function()
+                                        newParams.CollisionGroup = params.CollisionGroup
+                                        newParams.RespectCanCollide = params.RespectCanCollide
+                                    end)
+                                end
+                                
+                                if setnamecallmethod then pcall(setnamecallmethod, "Raycast") end
+                                return oldNamecall(self, origin, newDirection, newParams)
+                            end
                         end
                     end
                 end
