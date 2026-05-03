@@ -81,6 +81,25 @@ local function CreateSnow()
     
     local Lighting = game:GetService("Lighting")
     
+    -- 強制移除遊戲本身的 Skybox，否則大晴天的天空盒會蓋過霧氣
+    local function removeSky()
+        for _, v in pairs(Lighting:GetChildren()) do
+            if v:IsA("Sky") then v:Destroy() end
+        end
+    end
+    removeSky()
+    Lighting.ChildAdded:Connect(function(v)
+        if v:IsA("Sky") then task.wait() v:Destroy() end
+    end)
+    
+    -- 加入冷色調濾鏡
+    local colorCorrection = Lighting:FindFirstChild("ZRNSnowColorCorrection")
+    if not colorCorrection then
+        colorCorrection = Instance.new("ColorCorrectionEffect")
+        colorCorrection.Name = "ZRNSnowColorCorrection"
+        colorCorrection.Parent = Lighting
+    end
+    
     RunService.RenderStepped:Connect(function()
         if Camera then
             snowPart.CFrame = Camera.CFrame * CFrame.new(0, 50, 0)
@@ -89,16 +108,23 @@ local function CreateSnow()
         pcall(function()
             Lighting.Ambient = Color3.fromRGB(150, 160, 180)
             Lighting.OutdoorAmbient = Color3.fromRGB(120, 130, 150)
+            Lighting.ColorShift_Top = Color3.fromRGB(100, 110, 120)
+            Lighting.ColorShift_Bottom = Color3.fromRGB(100, 110, 120)
+            
+            -- 核心：透過濾鏡把整個遊戲畫面變成冬天陰暗感
+            colorCorrection.Saturation = -0.4 -- 降低鮮豔度 (變灰)
+            colorCorrection.TintColor = Color3.fromRGB(220, 230, 255) -- 套上微微的藍灰色冷光
+            colorCorrection.Brightness = -0.1
             
             local atmo = Lighting:FindFirstChildOfClass("Atmosphere")
             if atmo then
-                atmo.Density = 0.5
-                atmo.Color = Color3.fromRGB(180, 190, 200)
+                atmo.Density = 0.8
+                atmo.Color = Color3.fromRGB(140, 150, 170)
                 atmo.Glare = 0
-                atmo.Haze = 2
+                atmo.Haze = 5
             else
-                Lighting.FogColor = Color3.fromRGB(200, 210, 220)
-                Lighting.FogEnd = 300
+                Lighting.FogColor = Color3.fromRGB(140, 150, 170)
+                Lighting.FogEnd = 250
             end
         end)
     end)
