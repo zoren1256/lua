@@ -734,73 +734,29 @@ end
 
 -- 動態智能部位鎖定 (AI Smart Hitbox)
 local function getSmartTargetPart(character)
-    local Camera = Workspace.CurrentCamera
-    if not Camera then return nil end
-    local raycastParams = RaycastParams.new()
-    local filterList = {LocalPlayer.Character, Camera, Workspace.Terrain}
-    if Workspace:FindFirstChild("ZRNSnowPart") then table.insert(filterList, Workspace.ZRNSnowPart) end
-    raycastParams.FilterDescendantsInstances = filterList
-    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-    raycastParams.IgnoreWater = true
-
-    -- 【Rivals 特化】：尋找伺服器 Hitbox。Rivals 的 UI 飄字依賴於 Hitbox 數據，如果強制打擊視覺網格 (Visual Head) 會導致 UIShinyTexts 崩潰！
-    local hitboxes = character:FindFirstChild("Hitboxes") or character:FindFirstChild("Hitbox")
-    local primaryHitbox = nil
+    if not character then return nil end
     
-    if hitboxes then
-        primaryHitbox = hitboxes:FindFirstChild("Head") or hitboxes:FindFirstChild("HeadHitbox")
-        if not primaryHitbox then
-            for _, v in pairs(hitboxes:GetChildren()) do
-                if v:IsA("BasePart") then
-                    primaryHitbox = v
-                    break
-                end
-            end
-        end
-    end
-
-    local partsToScan = {}
-    if primaryHitbox then
-        table.insert(partsToScan, primaryHitbox)
-    else
-        if Settings.AimbotTarget ~= "Auto (AI)" then
-            table.insert(partsToScan, Settings.AimbotTarget)
-        else
-            partsToScan = {"Head", "UpperTorso", "LowerTorso", "RightUpperArm", "LeftUpperArm", "RightUpperLeg", "LeftUpperLeg"}
-        end
-    end
-
+    -- 絕對核心：只能鎖定具有「材質數據 (Material)」且能「映射到 Hitbox」的視覺部位。
+    -- 千萬不能鎖定 Hitboxes 內部零件 (無材質，導致 ClientViewModel 崩潰)
+    -- 千萬不能鎖定 HumanoidRootPart 或 配件 (無映射，導致 UIShinyTexts 崩潰)
+    local head = character:FindFirstChild("Head")
+    local upperTorso = character:FindFirstChild("UpperTorso")
+    local lowerTorso = character:FindFirstChild("LowerTorso")
+    
     local function validateAndReturn(part)
-        if part and part:IsA("BasePart") then
-            -- 強制開啟 CanQuery，確保武器射線能打中它
-            if not part.CanQuery then
-                pcall(function() part.CanQuery = true end)
-            end
+        if part and typeof(part) == "Instance" and part:IsA("BasePart") then
             return part
         end
         return nil
     end
 
-    for _, partName in ipairs(partsToScan) do
-        local part
-        if typeof(partName) == "string" then
-            part = character:FindFirstChild(partName)
-        else
-            part = partName
-        end
-        
-        if part and typeof(part) == "Instance" and part:IsA("BasePart") then
-            local origin = Camera.CFrame.Position
-            local direction = (part.Position - origin)
-            local result = Workspace:Raycast(origin, direction, raycastParams)
-            if not result or (result.Instance and result.Instance:IsDescendantOf(character)) then
-                return validateAndReturn(part)
-            end
-        end
+    if Settings.AimbotTarget == "Head" then
+        return validateAndReturn(head)
+    elseif Settings.AimbotTarget == "Torso" then
+        return validateAndReturn(upperTorso) or validateAndReturn(lowerTorso)
     end
     
-    -- 如果全被擋住，優先給 Head，否則 UpperTorso
-    return validateAndReturn(character:FindFirstChild(Settings.AimbotTarget ~= "Auto (AI)" and Settings.AimbotTarget or "Head") or character:FindFirstChild("UpperTorso"))
+    return validateAndReturn(head) or validateAndReturn(upperTorso) or validateAndReturn(lowerTorso)
 end
 
 -- 取得最近的目標
@@ -1138,12 +1094,23 @@ local successMT, errMT = pcall(function()
                             local angle = math.acos(dotProduct)
                             
                             if math.deg(angle) < 60 then
-                                -- 【終極解法：起點瞬移 (Teleport Origin)】
-                                local newOrigin = targetPart.Position - (tUnit * 2)
-                                local newDirection = tUnit * 100
+                                local newDirection = tUnit * (toTarget.Magnitude + 5)
+                                
+                                local newParams = RaycastParams.new()
+                                newParams.FilterType = Enum.RaycastFilterType.Include
+                                newParams.FilterDescendantsInstances = {targetPart} -- 絕對獨佔：只允許打中具有材質和 Hitbox 映射的視覺部位
+                                newParams.IgnoreWater = true
+                                
+                                -- 繼承原版射線的碰撞群組 (CollisionGroup)，讓這發子彈在物理引擎眼裡完全合法
+                                if params then
+                                    pcall(function()
+                                        newParams.CollisionGroup = params.CollisionGroup
+                                        newParams.RespectCanCollide = params.RespectCanCollide
+                                    end)
+                                end
                                 
                                 if setnamecallmethod then pcall(setnamecallmethod, "Raycast") end
-                                return oldNamecall(self, newOrigin, newDirection, params)
+                                return oldNamecall(self, origin, newDirection, newParams)
                             end
                         end
                     end
