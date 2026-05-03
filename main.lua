@@ -743,30 +743,57 @@ local function getSmartTargetPart(character)
     raycastParams.FilterType = Enum.RaycastFilterType.Exclude
     raycastParams.IgnoreWater = true
 
+    -- 【Rivals 特化】：優先尋找實體 Hitbox，因為視覺網格 (Visual Mesh) 沒有 Offset 數據會導致 UIShinyTexts 崩潰
+    local hitboxes = character:FindFirstChild("Hitboxes") or character:FindFirstChild("Hitbox")
+    local primaryHitbox = nil
+    
+    if hitboxes then
+        primaryHitbox = hitboxes:FindFirstChild("Head") or hitboxes:FindFirstChild("HeadHitbox")
+        if not primaryHitbox then
+            for _, v in pairs(hitboxes:GetChildren()) do
+                if v:IsA("BasePart") then
+                    primaryHitbox = v
+                    break
+                end
+            end
+        end
+    end
+    
+    if not primaryHitbox then
+        for _, v in pairs(character:GetDescendants()) do
+            if v:IsA("BasePart") and v.Name:lower():match("hitbox") and v.Name:lower():match("head") then
+                primaryHitbox = v
+                break
+            end
+        end
+    end
+
     local partsToScan = {}
-    -- 優先掃描使用者選擇的部位
-    if Settings.AimbotTarget ~= "Auto (AI)" then
-        table.insert(partsToScan, Settings.AimbotTarget)
+    if primaryHitbox then
+        table.insert(partsToScan, primaryHitbox)
     else
-        -- AI 模式：按優先級掃描全身
-        partsToScan = {"Head", "UpperTorso", "LowerTorso", "RightUpperArm", "LeftUpperArm", "RightUpperLeg", "LeftUpperLeg", "HumanoidRootPart"}
+        if Settings.AimbotTarget ~= "Auto (AI)" then
+            table.insert(partsToScan, Settings.AimbotTarget)
+        else
+            partsToScan = {"Head", "UpperTorso", "LowerTorso", "RightUpperArm", "LeftUpperArm", "RightUpperLeg", "LeftUpperLeg", "HumanoidRootPart"}
+        end
     end
 
     for _, partName in ipairs(partsToScan) do
-        local part = character:FindFirstChild(partName)
+        local part = typeof(partName) == "string" and character:FindFirstChild(partName) or partName
         if part then
             local origin = Camera.CFrame.Position
             local direction = (part.Position - origin)
             local result = Workspace:Raycast(origin, direction, raycastParams)
-            -- 如果沒打到東西（完全沒遮蔽），或者打到的東西屬於這個敵人
             if not result or (result.Instance and result.Instance:IsDescendantOf(character)) then
                 return part
             end
         end
     end
     
-    -- 如果全被擋住，退回預設鎖定點 (可能搭配穿牆子彈使用)
-    return character:FindFirstChild(Settings.AimbotTarget ~= "Auto (AI)" and Settings.AimbotTarget or "HumanoidRootPart")
+    -- 如果全被擋住，退回優先 Hitbox (給穿牆用)，否則給 HRP
+    if primaryHitbox then return primaryHitbox end
+    return character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild(Settings.AimbotTarget ~= "Auto (AI)" and Settings.AimbotTarget or "Head")
 end
 
 -- 取得最近的目標
@@ -1078,8 +1105,31 @@ local successMT, errMT = pcall(function()
         if Toggles.MagicBullet and IsShooting and not checkcaller() then
             local targetPart = CachedMagicBulletTargetPart
             if targetPart and targetPart.Parent then
-                -- 【安全輸入端欺騙】：我們不碰物理射線，也不碰伺服器封包！
-                -- 我們直接欺騙遊戲的攝影機，讓遊戲以為你的滑鼠正完美對準敵人的頭。
+                -- 【實體穿牆核心 (UE Raycast Bypass)】
+                if method == "Raycast" and self == Workspace then
+                    local origin = select(1, ...)
+                    local direction = select(2, ...)
+                    local params = select(3, ...)
+                    
+                    -- 如果射線方向大約朝向我們的目標，我們就強制修正它
+                    local toTarget = (targetPart.Position - origin)
+                    local angle = math.acos(direction.Unit:Dot(toTarget.Unit))
+                    if math.deg(angle) < 45 then
+                        -- 把射線長度延長到剛好穿透目標
+                        local newDirection = toTarget.Unit * (toTarget.Magnitude + 2)
+                        
+                        -- 確保穿牆用的射線不被牆壁擋住，我們使用 Include 模式只鎖定目標
+                        local newParams = RaycastParams.new()
+                        newParams.FilterType = Enum.RaycastFilterType.Include
+                        -- 注意：我們現在鎖定的是真正的 Hitbox 或是整個 Character，這樣遊戲就不會回報 nil
+                        newParams.FilterDescendantsInstances = {targetPart.Parent, targetPart}
+                        newParams.IgnoreWater = true
+                        
+                        return oldNamecall(self, origin, newDirection, newParams)
+                    end
+                end
+
+                -- 【安全輸入端欺騙】：欺騙遊戲的攝影機與滑鼠
                 if self == Workspace.CurrentCamera and (method == "ScreenPointToRay" or method == "ViewportPointToRay") then
                     local originalRay = oldNamecall(self, ...)
                     local origin = originalRay.Origin
