@@ -1068,6 +1068,37 @@ end)
 
 
 --------------------------------------------------------------------------------
+-- 武器穿透力竄改 (Penetration Spoofing) - 繞過伺服器牆壁驗證
+--------------------------------------------------------------------------------
+task.spawn(function()
+    while task.wait(2) do
+        if Toggles.MagicBullet then
+            pcall(function()
+                -- 透過垃圾回收器 (Garbage Collector) 掃描遊戲記憶體中的所有 Table (通常是武器數據模組)
+                for _, v in pairs(getgc(true)) do
+                    if type(v) == "table" then
+                        -- 將所有可能的「穿牆/穿透力」屬性直接鎖死為無限大
+                        if rawget(v, "Penetration") ~= nil and type(rawget(v, "Penetration")) == "number" then
+                            rawset(v, "Penetration", 99999)
+                        end
+                        if rawget(v, "WallPenetration") ~= nil and type(rawget(v, "WallPenetration")) == "number" then
+                            rawset(v, "WallPenetration", 99999)
+                        end
+                        if rawget(v, "Pierce") ~= nil then
+                            if type(rawget(v, "Pierce")) == "number" then
+                                rawset(v, "Pierce", 99999)
+                            elseif type(rawget(v, "Pierce")) == "boolean" then
+                                rawset(v, "Pierce", true)
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+--------------------------------------------------------------------------------
 -- 靜默追蹤 (子彈追蹤轉向)
 --------------------------------------------------------------------------------
 local successMT, errMT = pcall(function()
@@ -1082,29 +1113,40 @@ local successMT, errMT = pcall(function()
         if Toggles.MagicBullet and IsShooting and not checkcaller() then
             local targetPart = CachedMagicBulletTargetPart
             if targetPart then
-                if self == Workspace and method == "Raycast" then
-                    local origin = args[1]
-                    local direction = args[2]
-                    -- 攔截射擊射線
-                    if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
-                        -- 【子彈追蹤 (Silent Aim)】：強制將射線方向轉向敵人的頭部
-                        local newDirection = (targetPart.Position - origin).Unit * 1000
-                        args[2] = newDirection
-                        return oldNamecall(self, unpack(args))
-                    end
-                elseif self == Workspace and (method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay") then
-                    local origin = args[1].Origin
-                    local direction = args[1].Direction
-                    if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
-                        local newDirection = (targetPart.Position - origin).Unit * 1000
-                        args[1] = Ray.new(origin, newDirection)
-                        return oldNamecall(self, unpack(args))
-                    end
+                -- 【終極子彈追蹤：輸入端欺騙 (Input Spoofing)】
+                -- 我們不再修改物理射線 (那會導致 UI 崩潰)，而是修改「遊戲讀取滑鼠與鏡頭的瞬間」！
+                -- 讓遊戲以為你的準心正完美對準敵人的頭部，然後讓遊戲自己去發射正常的子彈！
+                if self == Workspace.CurrentCamera and (method == "ScreenPointToRay" or method == "ViewportPointToRay") then
+                    local originalRay = oldNamecall(self, ...)
+                    local origin = originalRay.Origin
+                    local direction = (targetPart.Position - origin).Unit
+                    return Ray.new(origin, direction)
                 end
             end
         end
 
         return oldNamecall(self, ...)
+    end)
+
+    local oldIndex = mt.__index
+    mt.__index = newcclosure(function(self, key)
+        if Toggles.MagicBullet and IsShooting and not checkcaller() then
+            local targetPart = CachedMagicBulletTargetPart
+            if targetPart then
+                -- 如果遊戲是透過讀取滑鼠的三維座標來決定開火方向
+                if self:IsA("Mouse") then
+                    if key == "Hit" or key == "hit" then
+                        return targetPart.CFrame
+                    elseif key == "Target" or key == "target" then
+                        return targetPart
+                    elseif key == "UnitRay" then
+                        local origin = Workspace.CurrentCamera.CFrame.Position
+                        return Ray.new(origin, (targetPart.Position - origin).Unit)
+                    end
+                end
+            end
+        end
+        return oldIndex(self, key)
     end)
 
     setreadonly(mt, true)
