@@ -1076,7 +1076,7 @@ local successMT, errMT = pcall(function()
                 end
             end
 
-            if isSafe and method == "Raycast" and self == Workspace then
+            if false and isSafe and method == "Raycast" and self == Workspace then
                 local targetPart = CachedMagicBulletTargetPart
                 if targetPart and targetPart.Parent then
                     local origin = select(1, ...)
@@ -1098,10 +1098,9 @@ local successMT, errMT = pcall(function()
                                 
                                 local newParams = RaycastParams.new()
                                 newParams.FilterType = Enum.RaycastFilterType.Include
-                                newParams.FilterDescendantsInstances = {targetPart} -- 絕對獨佔：只允許打中具有材質和 Hitbox 映射的視覺部位
+                                newParams.FilterDescendantsInstances = {targetPart}
                                 newParams.IgnoreWater = true
                                 
-                                -- 繼承原版射線的碰撞群組 (CollisionGroup)，讓這發子彈在物理引擎眼裡完全合法
                                 if params then
                                     pcall(function()
                                         newParams.CollisionGroup = params.CollisionGroup
@@ -1112,6 +1111,20 @@ local successMT, errMT = pcall(function()
                                 if setnamecallmethod then pcall(setnamecallmethod, "Raycast") end
                                 return oldNamecall(self, origin, newDirection, newParams)
                             end
+                        end
+                    end
+                end
+            end
+            
+            -- Packet Logger: 尋找真正的傷害封包
+            if method == "FireServer" or method == "InvokeServer" then
+                if Toggles.MagicBullet then
+                    local args = {...}
+                    -- 過濾掉一些常見的垃圾封包 (例如移動、滑鼠座標、動畫等)
+                    if self.Name ~= "MousePosUpdate" and self.Name ~= "CharacterMove" and self.Name ~= "Ping" then
+                        print("[RIVALS PACKET] Type:", method, " | Name:", self.Name)
+                        for i, v in ipairs(args) do
+                            print("  Arg", i, ":", typeof(v), tostring(v))
                         end
                     end
                 end
