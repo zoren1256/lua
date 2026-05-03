@@ -1077,25 +1077,14 @@ local successMT, errMT = pcall(function()
                     local direction = args[2]
                     -- 攔截射擊射線
                     if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
-                        -- 1. 鎖死方向 (Silent Aim)
+                        -- 【真・穿牆黑科技 (Origin Spoofing)】
+                        -- 既然伺服器或本地會判定撞牆，那我們就不從槍口發射了！
+                        -- 直接把子彈的「發射起點」瞬間轉移到敵人臉上 0.5 Studs 的距離，完全跳過中間所有的牆壁！
                         local newDirection = (targetPart.Position - origin).Unit * 1000
-                        args[2] = newDirection
+                        local fakeOrigin = targetPart.Position - (newDirection.Unit * 0.5)
                         
-                        -- 2. 真・穿牆 (Wallbang)：修改射線過濾器，徹底無視地圖牆壁！
-                        local oldParams = args[3]
-                        if typeof(oldParams) == "RaycastParams" then
-                            local newParams = RaycastParams.new()
-                            newParams.FilterType = Enum.RaycastFilterType.Include
-                            local hitTargets = {}
-                            for _, p in pairs(Players:GetPlayers()) do
-                                if p ~= LocalPlayer and p.Character then
-                                    table.insert(hitTargets, p.Character)
-                                end
-                            end
-                            newParams.FilterDescendantsInstances = hitTargets
-                            newParams.IgnoreWater = true
-                            args[3] = newParams
-                        end
+                        args[1] = fakeOrigin
+                        args[2] = newDirection
                         
                         return oldNamecall(self, unpack(args))
                     end
@@ -1104,8 +1093,9 @@ local successMT, errMT = pcall(function()
                     local direction = args[1].Direction
                     if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
                         local newDirection = (targetPart.Position - origin).Unit * 1000
-                        args[1] = Ray.new(origin, newDirection)
+                        local fakeOrigin = targetPart.Position - (newDirection.Unit * 0.5)
                         
+                        args[1] = Ray.new(fakeOrigin, newDirection)
                         return oldNamecall(self, unpack(args))
                     end
                 end
