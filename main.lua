@@ -232,7 +232,9 @@ function Library:CreateWindow(config)
     
     local function MountUI()
         local s1, e1 = pcall(function()
-            if type(syn) == "table" and type(syn.protect_gui) == "function" then
+            if gethui then
+                ZRN_GUI.Parent = gethui()
+            elseif type(syn) == "table" and type(syn.protect_gui) == "function" then
                 syn.protect_gui(ZRN_GUI)
                 ZRN_GUI.Parent = CoreGui
             else
@@ -801,13 +803,22 @@ local function createESP(player)
             local hum = character:WaitForChild("Humanoid", 5)
             if not head or not hrp or not hum then return end
 
-        if character:FindFirstChild("ZRN_Rivals_ESP") then
-            character.ZRN_Rivals_ESP:Destroy()
+        local targetParent = gethui and gethui() or CoreGui
+        local mainESPFolder = targetParent:FindFirstChild("ZRN_Rivals_ESP_Container")
+        if not mainESPFolder then
+            mainESPFolder = Instance.new("Folder")
+            mainESPFolder.Name = "ZRN_Rivals_ESP_Container"
+            mainESPFolder.Parent = targetParent
+        end
+        
+        local espFolderName = "ESP_" .. player.Name
+        if mainESPFolder:FindFirstChild(espFolderName) then
+            mainESPFolder[espFolderName]:Destroy()
         end
 
         local espFolder = Instance.new("Folder")
-        espFolder.Name = "ZRN_Rivals_ESP"
-        espFolder.Parent = character
+        espFolder.Name = espFolderName
+        espFolder.Parent = mainESPFolder
 
         -- 名字與血量
         local billboard = Instance.new("BillboardGui")
@@ -860,47 +871,49 @@ local function createESP(player)
         -- 渲染更新迴圈
         local conn
         conn = RunService.RenderStepped:Connect(function()
-            if not character.Parent or hum.Health <= 0 then
-                conn:Disconnect()
-                espFolder:Destroy()
-                return
-            end
-
-            -- 更新透視文字
-            if Toggles.NameESP or Toggles.HealthESP or Toggles.DistanceESP then
-                billboard.Enabled = true
-                local display = ""
-                if Toggles.NameESP then display = display .. player.Name .. "\n" end
-                if Toggles.HealthESP then display = display .. "[ " .. math.floor(hum.Health) .. " HP ]\n" end
-                if Toggles.DistanceESP and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    local dist = (hrp.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
-                    display = display .. math.floor(dist) .. " M"
+            pcall(function()
+                if not character.Parent or hum.Health <= 0 then
+                    conn:Disconnect()
+                    if espFolder and espFolder.Parent then espFolder:Destroy() end
+                    return
                 end
-                textLabel.Text = display
-            else
-                billboard.Enabled = false
-            end
 
-            -- 更新外框透視 (AI 追蹤專用螢光紫)
-            if Toggles.BoxESP then
-                if not espFolder:FindFirstChild("BoxHighlight") then
-                    local hl = Instance.new("Highlight")
-                    hl.Name = "BoxHighlight"
-                    hl.Parent = espFolder
-                    hl.Adornee = character -- 必須設定 Adornee 才會顯示
-                    hl.FillColor = Color3.fromRGB(255, 0, 255) -- 純洋紅色 (Python 最好抓的顏色)
-                    hl.FillTransparency = 0.5
-                    hl.OutlineColor = Color3.fromRGB(255, 0, 255)
-                    hl.OutlineTransparency = 0
+                -- 更新透視文字
+                if Toggles.NameESP or Toggles.HealthESP or Toggles.DistanceESP then
+                    billboard.Enabled = true
+                    local display = ""
+                    if Toggles.NameESP then display = display .. player.Name .. "\n" end
+                    if Toggles.HealthESP then display = display .. "[ " .. math.floor(hum.Health) .. " HP ]\n" end
+                    if Toggles.DistanceESP and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                        local dist = (hrp.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
+                        display = display .. math.floor(dist) .. " M"
+                    end
+                    textLabel.Text = display
+                else
+                    billboard.Enabled = false
                 end
-            else
-                if espFolder:FindFirstChild("BoxHighlight") then
-                    espFolder.BoxHighlight:Destroy()
-                end
-            end
 
-            -- 更新判定區
-            updateHitbox()
+                -- 更新外框透視 (AI 追蹤專用螢光紫)
+                if Toggles.BoxESP then
+                    if not espFolder:FindFirstChild("BoxHighlight") then
+                        local hl = Instance.new("Highlight")
+                        hl.Name = "BoxHighlight"
+                        hl.Parent = espFolder
+                        hl.Adornee = character -- 必須設定 Adornee 才會顯示
+                        hl.FillColor = Color3.fromRGB(255, 0, 255) -- 純洋紅色 (Python 最好抓的顏色)
+                        hl.FillTransparency = 0.5
+                        hl.OutlineColor = Color3.fromRGB(255, 0, 255)
+                        hl.OutlineTransparency = 0
+                    end
+                else
+                    if espFolder:FindFirstChild("BoxHighlight") then
+                        espFolder.BoxHighlight:Destroy()
+                    end
+                end
+
+                -- 更新判定區
+                updateHitbox()
+            end)
         end)
         end)
     end
