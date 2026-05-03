@@ -1068,20 +1068,17 @@ local successMT, errMT = pcall(function()
 
     mt.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
-        local args = {...}
+        local argCount = select("#", ...)
 
         if Toggles.MagicBullet and IsShooting and not checkcaller() then
             local targetPart = CachedMagicBulletTargetPart
             if targetPart and targetPart.Parent then
                 if method == "FireServer" or method == "InvokeServer" then
-                    -- 【終極深層封包欺騙 (Safe Deep Copy Spoofing)】
-                    -- 我們不修改物理射線，讓本地遊戲完美運行，UI 絕對不崩潰。
-                    -- 我們攔截傳送給伺服器的「傷害結算封包」，並複製一份 (Deep Copy) 來竄改。
+                    -- 【修復 nil 遺失問題：安全封包攔截】
                     local cameraPos = Workspace.CurrentCamera.CFrame.Position
                     local hasPart = false
                     local hasVec = false
                     
-                    -- 檢查特徵：擊中判定封包通常同時包含 BasePart 與 Vector3
                     local function scan(t)
                         for _, v in pairs(t) do
                             if typeof(v) == "Instance" and v:IsA("BasePart") then hasPart = true end
@@ -1089,7 +1086,14 @@ local successMT, errMT = pcall(function()
                             if type(v) == "table" then scan(v) end
                         end
                     end
-                    scan(args)
+                    
+                    -- 正確遍歷所有參數，包含中間可能為 nil 的空洞
+                    for i = 1, argCount do
+                        local v = select(i, ...)
+                        if typeof(v) == "Instance" and v:IsA("BasePart") then hasPart = true end
+                        if typeof(v) == "Vector3" then hasVec = true end
+                        if type(v) == "table" then scan(v) end
+                    end
 
                     if hasPart and hasVec then
                         local function deepCopyAndSpoof(t)
@@ -1097,7 +1101,6 @@ local successMT, errMT = pcall(function()
                             local spoofed = false
                             for k, v in pairs(t) do
                                 if typeof(v) == "Instance" and v:IsA("BasePart") then
-                                    -- 如果零件不是玩家自己的身體/槍枝，就竄改成敵人的頭
                                     if LocalPlayer.Character and not v:IsDescendantOf(LocalPlayer.Character) then
                                         newT[k] = targetPart
                                         spoofed = true
@@ -1105,7 +1108,6 @@ local successMT, errMT = pcall(function()
                                         newT[k] = v
                                     end
                                 elseif typeof(v) == "Vector3" then
-                                    -- 如果座標離玩家很遠(擊中點)，就竄改成敵人頭的座標
                                     if (v - cameraPos).Magnitude > 5 then
                                         newT[k] = targetPart.Position
                                         spoofed = true
@@ -1125,7 +1127,8 @@ local successMT, errMT = pcall(function()
 
                         local newArgs = {}
                         local spoofedAny = false
-                        for i, arg in pairs(args) do
+                        for i = 1, argCount do
+                            local arg = select(i, ...)
                             if typeof(arg) == "Instance" and arg:IsA("BasePart") then
                                 if LocalPlayer.Character and not arg:IsDescendantOf(LocalPlayer.Character) then
                                     newArgs[i] = targetPart
@@ -1150,7 +1153,8 @@ local successMT, errMT = pcall(function()
                         end
 
                         if spoofedAny then
-                            return oldNamecall(self, unpack(newArgs))
+                            -- 確保 unpack 的長度與原本完全一致，防止 nil 導致封包格式錯誤崩潰
+                            return oldNamecall(self, unpack(newArgs, 1, argCount))
                         end
                     end
                 end
