@@ -1023,7 +1023,7 @@ end)
 
 
 --------------------------------------------------------------------------------
--- 靜默追蹤 (安全輸入欺騙 Input Spoofing)
+-- 靜默追蹤 (終極方案：封包攔截與重寫 Packet Manipulation)
 --------------------------------------------------------------------------------
 local successMT, errMT = pcall(function()
     local mt = getrawmetatable(game)
@@ -1032,24 +1032,38 @@ local successMT, errMT = pcall(function()
 
     mt.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
-        
-        -- 【靜默自瞄 (Silent Aim)：純相機欺騙】
-        -- 只欺騙 ScreenPointToRay/ViewportPointToRay，這涵蓋了 99% 的現代 FPS 射線。
-        -- 絕對不 Hook __index，因為各家執行器對 oldIndex(self, key) 處理 DataType (如 Vector2) 容易回傳 nil，導致 UI (如 Nametag/Details) 嚴重崩潰！
-        if Toggles.MagicBullet and IsShooting and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
-            local targetPart = CachedMagicBulletTargetPart
-            if targetPart and targetPart.Parent then
-                if self == Workspace.CurrentCamera then
-                    if method == "ScreenPointToRay" or method == "ViewportPointToRay" then
-                        local origin = self.CFrame.Position
-                        local direction = (targetPart.Position - origin).Unit
-                        return Ray.new(origin, direction)
+        local args = {...}
+
+        -- 當我們開啟靜默追蹤時，我們不改遊戲物理射線，我們直接改「送給伺服器的傷害封包」！
+        -- 第一步：找出 Rivals 是用哪一個 Remote 來判定傷害的
+        if Toggles.MagicBullet then
+            if method == "FireServer" or method == "InvokeServer" then
+                -- 過濾掉常見的無關封包，例如移動、滑鼠更新
+                local remoteName = tostring(self.Name)
+                if not string.find(remoteName, "Move") and not string.find(remoteName, "Mouse") and not string.find(remoteName, "Update") then
+                    -- 檢查參數裡有沒有包含 Character 或 Part
+                    for i, arg in pairs(args) do
+                        if typeof(arg) == "Instance" and (arg:IsA("Model") or arg:IsA("BasePart")) then
+                            print("[ZRN Logger] 發送疑似傷害封包: ", remoteName)
+                            print("參數 " .. i .. " :", arg)
+                        end
+                        -- 檢查參數有沒有 Vector3 (通常是擊中座標)
+                        if typeof(arg) == "Vector3" then
+                            print("參數 " .. i .. " 座標:", arg)
+                        end
+                        -- 檢查 table 參數 (Rivals 可能把資料包裝在 table 裡)
+                        if type(arg) == "table" then
+                            for k, v in pairs(arg) do
+                                if typeof(v) == "Instance" and (v:IsA("Model") or v:IsA("BasePart")) then
+                                    print("[ZRN Logger] Table內含物件: ", remoteName, "[", k, "] = ", v)
+                                end
+                            end
+                        end
                     end
                 end
             end
         end
 
-        -- 確保不要把原本的 Raycast 攔截留著
         if setnamecallmethod then pcall(setnamecallmethod, method) end
         return oldNamecall(self, ...)
     end)
