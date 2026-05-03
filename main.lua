@@ -1107,78 +1107,43 @@ end)
 local successMT, errMT = pcall(function()
     local mt = getrawmetatable(game)
     local oldNamecall = mt.__namecall
-    local oldIndex = mt.__index
     setreadonly(mt, false)
-
-    local function isSafeCaller()
-        if checkcaller() then return false end
-        local caller = getcallingscript()
-        if caller then
-            local fullName = caller:GetFullName()
-            -- 絕對不干涉任何 UI 或遊戲組件的渲染腳本，避免產生 Inset/Details 等 UI 崩潰
-            if fullName:find("UserInterface") or fullName:find("GameComponents") or fullName:find("PlayerList") or fullName:find("GUI") then
-                return false
-            end
-        end
-        return true
-    end
 
     mt.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
         
-        if Toggles.MagicBullet and IsShooting and isSafeCaller() then
-            local targetPart = CachedMagicBulletTargetPart
-            if targetPart and targetPart.Parent then
-                -- 【實體穿牆核心 (UE Raycast Bypass)】
-                if method == "Raycast" and self == Workspace then
+        if Toggles.MagicBullet and IsShooting then
+            -- 【純淨版 UE Raycast 靜默穿牆】
+            -- 捨棄所有滑鼠/攝影機欺騙，完全不干涉 UI 邏輯。
+            -- 只有在底層發射射線時，強行將射線彎曲並穿透牆壁擊中目標。
+            if method == "Raycast" and self == Workspace then
+                local targetPart = CachedMagicBulletTargetPart
+                if targetPart and targetPart.Parent then
                     local origin = select(1, ...)
                     local direction = select(2, ...)
                     local params = select(3, ...)
                     
-                    local toTarget = (targetPart.Position - origin)
-                    local angle = math.acos(direction.Unit:Dot(toTarget.Unit))
-                    if math.deg(angle) < 45 then
-                        local newDirection = toTarget.Unit * (toTarget.Magnitude + 2)
-                        
-                        local newParams = RaycastParams.new()
-                        newParams.FilterType = Enum.RaycastFilterType.Include
-                        newParams.FilterDescendantsInstances = {targetPart.Parent, targetPart}
-                        newParams.IgnoreWater = true
-                        
-                        return oldNamecall(self, origin, newDirection, newParams)
+                    if typeof(origin) == "Vector3" and typeof(direction) == "Vector3" then
+                        local toTarget = (targetPart.Position - origin)
+                        -- 檢查原本的射線是否大致朝向目標 (FOV內)
+                        local angle = math.acos(direction.Unit:Dot(toTarget.Unit))
+                        if math.deg(angle) < 60 then
+                            local newDirection = toTarget.Unit * (toTarget.Magnitude + 5)
+                            
+                            -- 強制射線只鎖定目標，達到穿牆效果
+                            local newParams = RaycastParams.new()
+                            newParams.FilterType = Enum.RaycastFilterType.Include
+                            newParams.FilterDescendantsInstances = {targetPart.Parent}
+                            newParams.IgnoreWater = true
+                            
+                            return oldNamecall(self, origin, newDirection, newParams)
+                        end
                     end
-                end
-
-                -- 【安全輸入端欺騙】：欺騙遊戲的攝影機與滑鼠
-                if self == Workspace.CurrentCamera and (method == "ScreenPointToRay" or method == "ViewportPointToRay") then
-                    local originalRay = oldNamecall(self, ...)
-                    local origin = originalRay.Origin
-                    local direction = (targetPart.Position - origin).Unit
-                    return Ray.new(origin, direction)
                 end
             end
         end
 
         return oldNamecall(self, ...)
-    end)
-
-    mt.__index = newcclosure(function(self, key)
-        if Toggles.MagicBullet and IsShooting and isSafeCaller() then
-            local targetPart = CachedMagicBulletTargetPart
-            if targetPart and targetPart.Parent then
-                if self:IsA("Mouse") then
-                    if key == "Hit" or key == "hit" then
-                        return targetPart.CFrame
-                    elseif key == "Target" or key == "target" then
-                        return targetPart
-                    elseif key == "UnitRay" then
-                        local origin = Workspace.CurrentCamera.CFrame.Position
-                        return Ray.new(origin, (targetPart.Position - origin).Unit)
-                    end
-                end
-            end
-        end
-        return oldIndex(self, key)
     end)
 
     setreadonly(mt, true)
