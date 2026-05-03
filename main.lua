@@ -1077,10 +1077,25 @@ local successMT, errMT = pcall(function()
                     local direction = args[2]
                     -- 攔截射擊射線
                     if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
-                        -- 極簡暴力解法：保持原點 (Origin) 不變以繞過反作弊原點檢查，
-                        -- 直接將射線方向 (Direction) 強制鎖死指向敵人的部位。
+                        -- 1. 鎖死方向 (Silent Aim)
                         local newDirection = (targetPart.Position - origin).Unit * 1000
                         args[2] = newDirection
+                        
+                        -- 2. 真・穿牆 (Wallbang)：修改射線過濾器，徹底無視地圖牆壁！
+                        local oldParams = args[3]
+                        if typeof(oldParams) == "RaycastParams" then
+                            local newParams = RaycastParams.new()
+                            newParams.FilterType = Enum.RaycastFilterType.Include
+                            local hitTargets = {}
+                            for _, p in pairs(Players:GetPlayers()) do
+                                if p ~= LocalPlayer and p.Character then
+                                    table.insert(hitTargets, p.Character)
+                                end
+                            end
+                            newParams.FilterDescendantsInstances = hitTargets
+                            newParams.IgnoreWater = true
+                            args[3] = newParams
+                        end
                         
                         return oldNamecall(self, unpack(args))
                     end
