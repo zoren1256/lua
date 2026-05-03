@@ -1120,8 +1120,6 @@ local successMT, errMT = pcall(function()
         
         if Toggles.MagicBullet and IsShooting then
             -- 【純淨版 UE Raycast 靜默穿牆】
-            -- 捨棄所有滑鼠/攝影機欺騙，完全不干涉 UI 邏輯。
-            -- 只有在底層發射射線時，強行將射線彎曲並穿透牆壁擊中目標。
             if method == "Raycast" and self == Workspace then
                 local targetPart = CachedMagicBulletTargetPart
                 if targetPart and targetPart.Parent then
@@ -1131,17 +1129,18 @@ local successMT, errMT = pcall(function()
                     
                     if typeof(origin) == "Vector3" and typeof(direction) == "Vector3" then
                         local toTarget = (targetPart.Position - origin)
-                        -- 檢查原本的射線是否大致朝向目標 (FOV內)
-                        local angle = math.acos(direction.Unit:Dot(toTarget.Unit))
+                        -- 避免使用 colon (:) 運算子，因為它會覆蓋內部的 namecallmethod 暫存器，導致 oldNamecall 執行錯誤的方法！
+                        local dotProduct = direction.Unit.Dot(direction.Unit, toTarget.Unit)
+                        local angle = math.acos(dotProduct)
                         if math.deg(angle) < 60 then
                             local newDirection = toTarget.Unit * (toTarget.Magnitude + 5)
                             
-                            -- 強制射線只鎖定目標，達到穿牆效果
                             local newParams = RaycastParams.new()
                             newParams.FilterType = Enum.RaycastFilterType.Include
                             newParams.FilterDescendantsInstances = {targetPart}
                             newParams.IgnoreWater = true
                             
+                            setnamecallmethod("Raycast")
                             return oldNamecall(self, origin, newDirection, newParams)
                         end
                     end
@@ -1149,6 +1148,7 @@ local successMT, errMT = pcall(function()
             end
         end
 
+        setnamecallmethod(method)
         return oldNamecall(self, ...)
     end)
 
