@@ -743,11 +743,31 @@ local function getSmartTargetPart(character)
     raycastParams.FilterType = Enum.RaycastFilterType.Exclude
     raycastParams.IgnoreWater = true
 
+    -- 【Rivals 特化】：尋找伺服器 Hitbox。Rivals 的 UI 飄字依賴於 Hitbox 數據，如果強制打擊視覺網格 (Visual Head) 會導致 UIShinyTexts 崩潰！
+    local hitboxes = character:FindFirstChild("Hitboxes") or character:FindFirstChild("Hitbox")
+    local primaryHitbox = nil
+    
+    if hitboxes then
+        primaryHitbox = hitboxes:FindFirstChild("Head") or hitboxes:FindFirstChild("HeadHitbox")
+        if not primaryHitbox then
+            for _, v in pairs(hitboxes:GetChildren()) do
+                if v:IsA("BasePart") then
+                    primaryHitbox = v
+                    break
+                end
+            end
+        end
+    end
+
     local partsToScan = {}
-    if Settings.AimbotTarget ~= "Auto (AI)" then
-        table.insert(partsToScan, Settings.AimbotTarget)
+    if primaryHitbox then
+        table.insert(partsToScan, primaryHitbox)
     else
-        partsToScan = {"Head", "UpperTorso", "LowerTorso", "RightUpperArm", "LeftUpperArm", "RightUpperLeg", "LeftUpperLeg"}
+        if Settings.AimbotTarget ~= "Auto (AI)" then
+            table.insert(partsToScan, Settings.AimbotTarget)
+        else
+            partsToScan = {"Head", "UpperTorso", "LowerTorso", "RightUpperArm", "LeftUpperArm", "RightUpperLeg", "LeftUpperLeg"}
+        end
     end
 
     local function validateAndReturn(part)
