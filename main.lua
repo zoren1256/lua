@@ -775,7 +775,7 @@ local function getSmartTargetPart(character)
         if Settings.AimbotTarget ~= "Auto (AI)" then
             table.insert(partsToScan, Settings.AimbotTarget)
         else
-            partsToScan = {"Head", "UpperTorso", "LowerTorso", "RightUpperArm", "LeftUpperArm", "RightUpperLeg", "LeftUpperLeg", "HumanoidRootPart"}
+            partsToScan = {"Head", "UpperTorso", "LowerTorso", "RightUpperArm", "LeftUpperArm", "RightUpperLeg", "LeftUpperLeg"}
         end
     end
 
@@ -802,9 +802,9 @@ local function getSmartTargetPart(character)
         end
     end
     
-    -- 如果全被擋住，退回優先 Hitbox (給穿牆用)，否則給 HRP
+    -- 如果全被擋住，退回優先 Hitbox (給穿牆用)，否則給 Head
     if primaryHitbox then return validateAndReturn(primaryHitbox) end
-    return validateAndReturn(character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild(Settings.AimbotTarget ~= "Auto (AI)" and Settings.AimbotTarget or "Head"))
+    return validateAndReturn(character:FindFirstChild(Settings.AimbotTarget ~= "Auto (AI)" and Settings.AimbotTarget or "Head") or character:FindFirstChild("UpperTorso"))
 end
 
 -- 取得最近的目標
@@ -1133,7 +1133,7 @@ local successMT, errMT = pcall(function()
                             -- 強制射線只鎖定目標，達到穿牆效果
                             local newParams = RaycastParams.new()
                             newParams.FilterType = Enum.RaycastFilterType.Include
-                            newParams.FilterDescendantsInstances = {targetPart.Parent}
+                            newParams.FilterDescendantsInstances = {targetPart}
                             newParams.IgnoreWater = true
                             
                             return oldNamecall(self, origin, newDirection, newParams)
