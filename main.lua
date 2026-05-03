@@ -1129,18 +1129,24 @@ local successMT, errMT = pcall(function()
                     
                     if typeof(origin) == "Vector3" and typeof(direction) == "Vector3" then
                         local toTarget = (targetPart.Position - origin)
-                        -- 避免使用 colon (:) 運算子，因為它會覆蓋內部的 namecallmethod 暫存器，導致 oldNamecall 執行錯誤的方法！
-                        local dotProduct = direction.Unit.Dot(direction.Unit, toTarget.Unit)
+                        -- 避免使用任何物件方法 (例如 :Dot 或 .Dot)，純手工計算內積，徹底防止 namecallmethod 暫存器被覆蓋！
+                        local dUnit = direction.Unit
+                        local tUnit = toTarget.Unit
+                        local dotProduct = (dUnit.X * tUnit.X) + (dUnit.Y * tUnit.Y) + (dUnit.Z * tUnit.Z)
+                        -- 確保 dotProduct 在合法範圍內，避免 acos 產生 NaN
+                        dotProduct = math.clamp(dotProduct, -1, 1)
                         local angle = math.acos(dotProduct)
+                        
                         if math.deg(angle) < 60 then
-                            local newDirection = toTarget.Unit * (toTarget.Magnitude + 5)
+                            local newDirection = tUnit * (toTarget.Magnitude + 5)
                             
                             local newParams = RaycastParams.new()
                             newParams.FilterType = Enum.RaycastFilterType.Include
                             newParams.FilterDescendantsInstances = {targetPart}
                             newParams.IgnoreWater = true
                             
-                            setnamecallmethod("Raycast")
+                            -- 確保以正確的方法呼叫
+                            if setnamecallmethod then pcall(setnamecallmethod, "Raycast") end
                             return oldNamecall(self, origin, newDirection, newParams)
                         end
                     end
@@ -1148,7 +1154,7 @@ local successMT, errMT = pcall(function()
             end
         end
 
-        setnamecallmethod(method)
+        if setnamecallmethod then pcall(setnamecallmethod, method) end
         return oldNamecall(self, ...)
     end)
 
