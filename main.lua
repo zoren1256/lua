@@ -743,7 +743,7 @@ local function getSmartTargetPart(character)
     raycastParams.FilterType = Enum.RaycastFilterType.Exclude
     raycastParams.IgnoreWater = true
 
-    -- 【Rivals 特化】：優先尋找實體 Hitbox，因為視覺網格 (Visual Mesh) 沒有 Offset 數據會導致 UIShinyTexts 崩潰
+    -- 【Rivals 特化】：優先尋找實體 Hitbox
     local hitboxes = character:FindFirstChild("Hitboxes") or character:FindFirstChild("Hitbox")
     local primaryHitbox = nil
     
@@ -779,6 +779,17 @@ local function getSmartTargetPart(character)
         end
     end
 
+    local function validateAndReturn(part)
+        if part and part:IsA("BasePart") then
+            -- 強制開啟 CanQuery，確保武器射線能打中它，否則 Raycast 回傳 nil 會導致後端 UI 崩潰！
+            if not part.CanQuery then
+                pcall(function() part.CanQuery = true end)
+            end
+            return part
+        end
+        return nil
+    end
+
     for _, partName in ipairs(partsToScan) do
         local part = typeof(partName) == "string" and character:FindFirstChild(partName) or partName
         if part then
@@ -786,14 +797,14 @@ local function getSmartTargetPart(character)
             local direction = (part.Position - origin)
             local result = Workspace:Raycast(origin, direction, raycastParams)
             if not result or (result.Instance and result.Instance:IsDescendantOf(character)) then
-                return part
+                return validateAndReturn(part)
             end
         end
     end
     
     -- 如果全被擋住，退回優先 Hitbox (給穿牆用)，否則給 HRP
-    if primaryHitbox then return primaryHitbox end
-    return character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild(Settings.AimbotTarget ~= "Auto (AI)" and Settings.AimbotTarget or "Head")
+    if primaryHitbox then return validateAndReturn(primaryHitbox) end
+    return validateAndReturn(character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild(Settings.AimbotTarget ~= "Auto (AI)" and Settings.AimbotTarget or "Head"))
 end
 
 -- 取得最近的目標
