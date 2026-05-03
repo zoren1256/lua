@@ -1033,20 +1033,13 @@ local successMT, errMT = pcall(function()
     mt.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
         
-        -- 【靜默自瞄 (Silent Aim)：輸入欺騙】
-        -- 我們不攔截 Workspace:Raycast，因為那會破壞 ClientViewModel 的彈孔判定，導致 table expected 崩潰。
-        -- 我們只欺騙「準心指向」，讓遊戲的武器腳本「以為」你正看著敵人。
-        -- 同時絕對不欺騙 WorldToScreenPoint，避免破壞 UIShinyTexts 的傷害飄字 UI。
+        -- 【靜默自瞄 (Silent Aim)：純相機欺騙】
+        -- 只欺騙 ScreenPointToRay/ViewportPointToRay，這涵蓋了 99% 的現代 FPS 射線。
+        -- 絕對不 Hook __index，因為各家執行器對 oldIndex(self, key) 處理 DataType (如 Vector2) 容易回傳 nil，導致 UI (如 Nametag/Details) 嚴重崩潰！
         if Toggles.MagicBullet and IsShooting and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
             local targetPart = CachedMagicBulletTargetPart
             if targetPart and targetPart.Parent then
-                if self == Mouse then
-                    if method == "Hit" then
-                        return targetPart.CFrame
-                    elseif method == "Target" then
-                        return targetPart
-                    end
-                elseif self == Workspace.CurrentCamera then
+                if self == Workspace.CurrentCamera then
                     if method == "ScreenPointToRay" or method == "ViewportPointToRay" then
                         local origin = self.CFrame.Position
                         local direction = (targetPart.Position - origin).Unit
@@ -1059,22 +1052,6 @@ local successMT, errMT = pcall(function()
         -- 確保不要把原本的 Raycast 攔截留著
         if setnamecallmethod then pcall(setnamecallmethod, method) end
         return oldNamecall(self, ...)
-    end)
-    
-    -- 攔截 Mouse 的屬性索引 (__index) 以支援 Mouse.Hit
-    local oldIndex = mt.__index
-    mt.__index = newcclosure(function(self, key)
-        if Toggles.MagicBullet and IsShooting and self == Mouse and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
-            local targetPart = CachedMagicBulletTargetPart
-            if targetPart and targetPart.Parent then
-                if key == "Hit" then
-                    return targetPart.CFrame
-                elseif key == "Target" then
-                    return targetPart
-                end
-            end
-        end
-        return oldIndex(self, key)
     end)
 
     setreadonly(mt, true)
