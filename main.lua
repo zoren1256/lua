@@ -1206,13 +1206,15 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
     local method = getnamecallmethod()
     local args = {...}
 
-    if method == "Play" and self:IsA("Sound") and not checkcaller() then
+    if method == "Play" and typeof(self) == "Instance" and self:IsA("Sound") and not checkcaller() then
         if Toggles.CustomGunSound then
             local soundName = self.Name:lower()
             -- 檢查是否為槍聲
             if soundName:find("fire") or soundName:find("shoot") or soundName:find("shot") or soundName:find("gun") or soundName:find("bang") then
                 -- 確保只改自己的槍聲
-                if self:IsDescendantOf(Workspace.CurrentCamera) or (LocalPlayer.Character and self:IsDescendantOf(LocalPlayer.Character)) then
+                local inCamera = Workspace.CurrentCamera and self:IsDescendantOf(Workspace.CurrentCamera)
+                local inChar = LocalPlayer.Character and self:IsDescendantOf(LocalPlayer.Character)
+                if inCamera or inChar then
                     -- 播放自己的獨立聲音，不要修改原始物件，避免觸發遊戲的反作弊或報錯
                     task.spawn(function()
                         local customSound = Instance.new("Sound")
@@ -1246,7 +1248,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
                 CreateTracer(origin, origin + (direction.Unit * 250))
                 
                 if isMagic then
-                    return oldNamecall(self, args[1], args[2], args[3])
+                    return oldNamecall(self, unpack(args))
                 end
             end
         elseif self == Workspace and (method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay") then
@@ -1264,7 +1266,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
                 CreateTracer(origin, origin + (direction.Unit * 250))
                 
                 if isMagic then
-                    return oldNamecall(self, args[1], args[2], args[3], args[4])
+                    return oldNamecall(self, unpack(args))
                 end
             end
         end
