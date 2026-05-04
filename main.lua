@@ -34,7 +34,8 @@ local Toggles = {
     TriggerBot = false,
     ThirdPerson = false,
     SpinBot = false,
-    CustomMovement = false
+    CustomMovement = false,
+    SmartTrigger = false
 }
 
 local Settings = {
@@ -1062,23 +1063,41 @@ RunService.RenderStepped:Connect(function()
         end
     end
     
-    -- 自動開槍 (TriggerBot)
-    if Toggles.TriggerBot and LocalPlayer.Character then
-        local mouseLocation = UserInputService:GetMouseLocation()
-        local ray = Camera:ScreenPointToRay(mouseLocation.X, mouseLocation.Y)
+    -- 自動開槍 (TriggerBot / SmartTrigger)
+    if (Toggles.TriggerBot or Toggles.SmartTrigger) and LocalPlayer.Character then
+        local shouldShoot = false
         local raycastParams = RaycastParams.new()
-        raycastParams.FilterDescendantsInstances = {LocalPlayer.Character, Workspace.Terrain, Workspace:FindFirstChild("ZRNSnowPart")}
+        raycastParams.FilterDescendantsInstances = {LocalPlayer.Character, Workspace.Terrain}
         raycastParams.FilterType = Enum.RaycastFilterType.Exclude
         raycastParams.IgnoreWater = true
-        
-        local result = Workspace:Raycast(ray.Origin, ray.Direction * 1000, raycastParams)
-        if result and result.Instance then
-            local model = result.Instance:FindFirstAncestorOfClass("Model")
-            if model and model:FindFirstChild("Humanoid") and Players:GetPlayerFromCharacter(model) then
-                -- 瞄準到敵人，模擬點擊
-                mouse1press()
-                task.delay(0.05, function() mouse1release() end)
+
+        if Toggles.SmartTrigger then
+            -- 智能開火：無須對準，只要敵人在 FOV 內且有身體部位露出就開火 (配合靜默追蹤)
+            local targetPart = CachedMagicBulletTargetPart
+            if targetPart then
+                local origin = Camera.CFrame.Position
+                local result = Workspace:Raycast(origin, targetPart.Position - origin, raycastParams)
+                if not result or (result.Instance and result.Instance:IsDescendantOf(targetPart.Parent)) then
+                    shouldShoot = true
+                end
             end
+        elseif Toggles.TriggerBot then
+            -- 傳統 TriggerBot：必須準心指到敵人才開火
+            local mouseLocation = UserInputService:GetMouseLocation()
+            local ray = Camera:ScreenPointToRay(mouseLocation.X, mouseLocation.Y)
+            
+            local result = Workspace:Raycast(ray.Origin, ray.Direction * 1000, raycastParams)
+            if result and result.Instance then
+                local model = result.Instance:FindFirstAncestorOfClass("Model")
+                if model and model:FindFirstChild("Humanoid") and Players:GetPlayerFromCharacter(model) then
+                    shouldShoot = true
+                end
+            end
+        end
+
+        if shouldShoot then
+            mouse1press()
+            task.delay(0.05, function() mouse1release() end)
         end
     end
     
@@ -1185,7 +1204,8 @@ local Window = Library:CreateWindow({
 local CombatTab = Window:CreateTab("戰鬥")
 
 CombatTab:CreateToggle("啟用自瞄 (右鍵觸發)", false, function(state) Toggles.Aimbot = state end)
-CombatTab:CreateToggle("自動開槍 (TriggerBot)", false, function(state) Toggles.TriggerBot = state end)
+CombatTab:CreateToggle("傳統自動開槍 (需對準敵人)", false, function(state) Toggles.TriggerBot = state end)
+CombatTab:CreateToggle("智能開火 (配合靜默, 露頭即殺)", false, function(state) Toggles.SmartTrigger = state end)
 CombatTab:CreateToggle("啟用靜默追蹤", false, function(state) Toggles.MagicBullet = state end)
 CombatTab:CreateToggle("限制鎖定範圍 (FOV)", true, function(state) Settings.AimbotUseFOV = state end)
 CombatTab:CreateToggle("啟用移動預判 (Prediction)", false, function(state) Settings.AimbotPrediction = state end)
