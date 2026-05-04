@@ -1246,7 +1246,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
                 CreateTracer(origin, origin + (direction.Unit * 250))
                 
                 if isMagic then
-                    return oldNamecall(self, unpack(args))
+                    return oldNamecall(self, args[1], args[2], args[3])
                 end
             end
         elseif self == Workspace and (method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay") then
@@ -1264,7 +1264,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
                 CreateTracer(origin, origin + (direction.Unit * 250))
                 
                 if isMagic then
-                    return oldNamecall(self, unpack(args))
+                    return oldNamecall(self, args[1], args[2], args[3], args[4])
                 end
             end
         end
