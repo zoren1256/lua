@@ -1357,31 +1357,62 @@ ExploitTab:CreateToggle("自動回血", false, function(state)
     Toggles.AutoHeal = state
 end)
 
-ExploitTab:CreateButton("解鎖武器穿透與射速 (Weapon Mods)", function()
+ExploitTab:CreateButton("解鎖武器穿透 (Weapon Mods)", function()
     local count = 0
-    -- 掃描記憶體中的所有 Table，尋找類似武器設定的模組
+    
+    -- 方法一：掃描所有已載入的 ModuleScript，尋找真正的武器設定檔
+    local modules = getloadedmodules and getloadedmodules() or {}
+    for _, mod in pairs(modules) do
+        pcall(function()
+            if mod:IsA("ModuleScript") then
+                local success, data = pcall(require, mod)
+                if success and type(data) == "table" then
+                    -- 只修改同時包含多個武器屬性的 Table (避免誤觸遊戲系統)
+                    local function tryModifyWeapon(tbl)
+                        if type(tbl) ~= "table" then return end
+                        local weaponKeys = {"Penetration", "Pierce", "Wallbang", "WallPenetration", "WallbangDamage"}
+                        for _, key in pairs(weaponKeys) do
+                            if rawget(tbl, key) ~= nil then
+                                pcall(function()
+                                    if setreadonly then setreadonly(tbl, false) end
+                                    rawset(tbl, key, 9999)
+                                end)
+                                count = count + 1
+                            end
+                        end
+                    end
+                    
+                    tryModifyWeapon(data)
+                    -- 也檢查子表 (有些遊戲把武器屬性放在嵌套結構裡)
+                    for k, v in pairs(data) do
+                        if type(v) == "table" then
+                            tryModifyWeapon(v)
+                        end
+                    end
+                end
+            end
+        end)
+    end
+    
+    -- 方法二：用 getgc 補充掃描 (僅精準匹配同時有 Penetration 和 Damage 的 Table)
     for _, v in pairs(getgc(true)) do
         if type(v) == "table" then
-            -- 檢查是否包含常見的武器屬性鍵值
-            if rawget(v, "Penetration") or rawget(v, "Pierce") or rawget(v, "Damage") or rawget(v, "FireRate") or rawget(v, "Wallbang") then
-                -- 強制修改屬性 (如果有被凍結則先解凍)
-                if setreadonly then setreadonly(v, false) end
-                
-                if rawget(v, "Penetration") then v.Penetration = 9999 end
-                if rawget(v, "Pierce") then v.Pierce = 9999 end
-                if rawget(v, "Wallbang") then v.Wallbang = 9999 end
-                if rawget(v, "WallbangDamage") then v.WallbangDamage = 100 end
-                if rawget(v, "WallPenetration") then v.WallPenetration = 9999 end
-                
-                -- 可選：連帶提升武器性能
-                -- if rawget(v, "FireRate") then v.FireRate = 0.05 end
-                
-                if setreadonly then setreadonly(v, true) end
+            -- 必須同時包含 Penetration + Damage 才是武器，避免撞到 ReplicatedClass
+            if rawget(v, "Penetration") and rawget(v, "Damage") then
+                pcall(function()
+                    if setreadonly then setreadonly(v, false) end
+                    rawset(v, "Penetration", 9999)
+                    if rawget(v, "Pierce") then rawset(v, "Pierce", 9999) end
+                    if rawget(v, "Wallbang") then rawset(v, "Wallbang", 9999) end
+                    if rawget(v, "WallPenetration") then rawset(v, "WallPenetration", 9999) end
+                    if rawget(v, "WallbangDamage") then rawset(v, "WallbangDamage", 100) end
+                end)
                 count = count + 1
             end
         end
     end
-    warn("[ZRN] 已成功篡改 " .. tostring(count) .. " 個武器模組的穿透屬性！請隨便拿一把槍測試穿牆！")
+    
+    warn("[ZRN] 掃描完畢！共修改 " .. tostring(count) .. " 個武器穿透屬性。請隨便拿一把槍測試穿牆！")
 end)
 
 
