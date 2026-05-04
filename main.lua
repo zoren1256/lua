@@ -1335,6 +1335,67 @@ CharacterTab:CreateToggle("角色穿牆 (Noclip)", false, function(state)
     Toggles.Noclip = state
 end)
 
+-- 強制動作 (Force Emote)
+local EmoteList = {
+    ["跳舞 (Dance)"] = "rbxassetid://507771019",
+    ["揮手 (Wave)"] = "rbxassetid://507770239",
+    ["指點 (Point)"] = "rbxassetid://507770453",
+    ["歡呼 (Cheer)"] = "rbxassetid://507770677",
+    ["大笑 (Laugh)"] = "rbxassetid://507770818",
+    ["甩手舞 (Floss) [付費]"] = "rbxassetid://5917459365",
+    ["忍者舞 (Ninja) [付費]"] = "rbxassetid://5917482811",
+    ["炒熱氣氛 (Hype) [付費]"] = "rbxassetid://3696763610",
+    ["地板動作 (Top Rock) [付費]"] = "rbxassetid://5917477682",
+    ["神級舞蹈 (Godlike) [付費]"] = "rbxassetid://3333331310",
+    ["瑞克搖 (Rickroll) [付費]"] = "rbxassetid://8155982855"
+}
+
+local EmoteOptions = {
+    "跳舞 (Dance)", "揮手 (Wave)", "指點 (Point)", "歡呼 (Cheer)", "大笑 (Laugh)",
+    "甩手舞 (Floss) [付費]", "忍者舞 (Ninja) [付費]", "炒熱氣氛 (Hype) [付費]", 
+    "地板動作 (Top Rock) [付費]", "神級舞蹈 (Godlike) [付費]", "瑞克搖 (Rickroll) [付費]"
+}
+
+local SelectedEmote = "跳舞 (Dance)"
+local CurrentEmoteTrack = nil
+
+CharacterTab:CreateDropdown("選擇動作", EmoteOptions, "跳舞 (Dance)", function(val)
+    SelectedEmote = val
+end)
+
+CharacterTab:CreateButton("播放選定動作", function()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hum = char:FindFirstChild("Humanoid")
+    if not hum then return end
+    
+    local animator = hum:FindFirstChildOfClass("Animator")
+    if not animator then
+        animator = Instance.new("Animator")
+        animator.Parent = hum
+    end
+    
+    if CurrentEmoteTrack then
+        CurrentEmoteTrack:Stop()
+        CurrentEmoteTrack = nil
+    end
+    
+    local animId = EmoteList[SelectedEmote]
+    if animId then
+        local anim = Instance.new("Animation")
+        anim.AnimationId = animId
+        CurrentEmoteTrack = animator:LoadAnimation(anim)
+        CurrentEmoteTrack:Play()
+    end
+end)
+
+CharacterTab:CreateButton("停止動作", function()
+    if CurrentEmoteTrack then
+        CurrentEmoteTrack:Stop()
+        CurrentEmoteTrack = nil
+    end
+end)
+
 
 -- 破解分頁
 local ExploitTab = Window:CreateTab("破解")
