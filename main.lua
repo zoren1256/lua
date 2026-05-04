@@ -1357,10 +1357,6 @@ ExploitTab:CreateToggle("自動回血", false, function(state)
     Toggles.AutoHeal = state
 end)
 
-ExploitTab:CreateButton("自動回血", function()
-    -- placeholder
-end)
-
 
 -- 雜項分頁
 local MiscTab = Window:CreateTab("雜項")
@@ -1370,7 +1366,6 @@ MiscTab:CreateButton("強制關閉腳本", function()
     if gui then gui:Destroy() end
     if FOVCircle then FOVCircle:Remove() end
 end)
-
 
 -- 播放歡迎動畫
 task.spawn(function()
