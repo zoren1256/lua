@@ -35,8 +35,7 @@ local Toggles = {
     ThirdPerson = false,
     SpinBot = false,
     CustomMovement = false,
-    SmartTrigger = false,
-    PacketSniffer = false
+    SmartTrigger = false
 }
 
 local Settings = {
@@ -1358,6 +1357,33 @@ ExploitTab:CreateToggle("自動回血", false, function(state)
     Toggles.AutoHeal = state
 end)
 
+ExploitTab:CreateButton("解鎖武器穿透與射速 (Weapon Mods)", function()
+    local count = 0
+    -- 掃描記憶體中的所有 Table，尋找類似武器設定的模組
+    for _, v in pairs(getgc(true)) do
+        if type(v) == "table" then
+            -- 檢查是否包含常見的武器屬性鍵值
+            if rawget(v, "Penetration") or rawget(v, "Pierce") or rawget(v, "Damage") or rawget(v, "FireRate") or rawget(v, "Wallbang") then
+                -- 強制修改屬性 (如果有被凍結則先解凍)
+                if setreadonly then setreadonly(v, false) end
+                
+                if rawget(v, "Penetration") then v.Penetration = 9999 end
+                if rawget(v, "Pierce") then v.Pierce = 9999 end
+                if rawget(v, "Wallbang") then v.Wallbang = 9999 end
+                if rawget(v, "WallbangDamage") then v.WallbangDamage = 100 end
+                if rawget(v, "WallPenetration") then v.WallPenetration = 9999 end
+                
+                -- 可選：連帶提升武器性能
+                -- if rawget(v, "FireRate") then v.FireRate = 0.05 end
+                
+                if setreadonly then setreadonly(v, true) end
+                count = count + 1
+            end
+        end
+    end
+    warn("[ZRN] 已成功篡改 " .. tostring(count) .. " 個武器模組的穿透屬性！請隨便拿一把槍測試穿牆！")
+end)
+
 
 -- 雜項分頁
 local MiscTab = Window:CreateTab("雜項")
@@ -1368,97 +1394,6 @@ MiscTab:CreateButton("強制關閉腳本", function()
     if FOVCircle then FOVCircle:Remove() end
 end)
 
--- 開發與偵錯分頁 (Developer)
-local DevTab = Window:CreateTab("開發 (Dev)")
-
-local oldNamecallDev
-oldNamecallDev = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
-    local method = getnamecallmethod()
-    local args = {...}
-    
-    if Toggles.PacketSniffer and not checkcaller() and IsShooting then
-        if method == "FireServer" or method == "InvokeServer" or method == "Fire" then
-            -- 只要是 FireServer 或 InvokeServer 就一定是網路請求
-            local isRemote = (typeof(self) == "Instance" and (self:IsA("RemoteEvent") or self:IsA("RemoteFunction") or self:IsA("BindableEvent"))) or type(self) == "table"
-            
-            if isRemote then
-                -- 簡單過濾掉常見的心跳/防作弊封包 (只有一個 table 且包含奇怪加密字串的通常是 ping)
-                local isPing = false
-                if #args == 1 and type(args[1]) == "table" and args[1][2] and type(args[1][2]) == "string" and string.len(args[1][2]) > 10 then
-                    isPing = true
-                end
-                
-                if not isPing then
-                    print("====================================")
-                    print("[ZRN Sniffer] 💥 攔截到開火請求: ", tostring(self), " | Method: ", method)
-                    print("[ZRN Sniffer] 參數列表:")
-                    for i, v in pairs(args) do
-                        if type(v) == "table" then
-                            print("  Arg["..i.."]: [Table]")
-                            for k2, v2 in pairs(v) do
-                                print("    - " .. tostring(k2) .. " : " .. tostring(v2))
-                            end
-                        else
-                            print("  Arg["..i.."]: " .. type(v) .. " = " .. tostring(v))
-                        end
-                    end
-                    print("====================================")
-                end
-            end
-        end
-    end
-    
-    return oldNamecallDev(self, ...)
-end))
-
-local hasHookedGC = false
-local originalSendRemote = nil
-
-DevTab:CreateToggle("啟用封包嗅探 (Packet Sniffer)", false, function(state)
-    Toggles.PacketSniffer = state
-    if state then
-        warn("[ZRN] 封包嗅探已啟動。")
-        
-        -- 利用 getgc 找出遊戲自定義的 SendRemote 函數並掛鉤
-        if not hasHookedGC then
-            for _, v in pairs(getgc(true)) do
-                if type(v) == "table" and rawget(v, "SendRemote") and type(rawget(v, "SendRemote")) == "function" then
-                    originalSendRemote = v.SendRemote
-                    v.SendRemote = function(self, id, data)
-                        if Toggles.PacketSniffer and IsShooting then
-                            print("====================================")
-                            print("[ZRN Sniffer] 🎯 攔截到 SendRemote (ID: " .. tostring(id) .. ")")
-                            if type(data) == "table" then
-                                for k, val in pairs(data) do
-                                    print("  - " .. tostring(k) .. " : " .. tostring(val))
-                                    if type(val) == "table" then
-                                        for k2, val2 in pairs(val) do
-                                            print("      > " .. tostring(k2) .. " : " .. tostring(val2))
-                                        end
-                                    end
-                                end
-                            else
-                                print("  Data: " .. tostring(data))
-                            end
-                            print("====================================")
-                        end
-                        return originalSendRemote(self, id, data)
-                    end
-                    hasHookedGC = true
-                    warn("[ZRN] 成功掛鉤底層 SendRemote 函數！")
-                    break
-                end
-            end
-            if not hasHookedGC then
-                warn("[ZRN] 找不到 SendRemote，可能已被混淆。")
-            end
-        end
-        
-        warn("[ZRN] 請開槍擊中牆壁與敵人，並查看 F9 控制台。")
-    else
-        warn("[ZRN] 封包嗅探已關閉。")
-    end
-end)
 
 -- 播放歡迎動畫
 task.spawn(function()
