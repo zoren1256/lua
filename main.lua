@@ -1204,6 +1204,7 @@ end
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
     local method = getnamecallmethod()
+    local argCount = select("#", ...)
     local args = {...}
 
     -- 自訂檢查父節點函數，避免使用 :IsDescendantOf 污染 namecall method
@@ -1259,7 +1260,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
                 CreateTracer(origin, origin + (direction.Unit * 250))
                 
                 if isMagic then
-                    return oldNamecall(self, unpack(args))
+                    return oldNamecall(self, unpack(args, 1, argCount))
                 end
             end
         elseif self == Workspace and (method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay") then
@@ -1277,13 +1278,13 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
                 CreateTracer(origin, origin + (direction.Unit * 250))
                 
                 if isMagic then
-                    return oldNamecall(self, unpack(args))
+                    return oldNamecall(self, unpack(args, 1, argCount))
                 end
             end
         end
     end
 
-    return oldNamecall(self, ...)
+    return oldNamecall(self, unpack(args, 1, argCount))
 end))
 
 --------------------------------------------------------------------------------
