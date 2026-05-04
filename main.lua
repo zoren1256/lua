@@ -1411,10 +1411,50 @@ oldNamecallDev = hookmetamethod(game, "__namecall", newcclosure(function(self, .
     return oldNamecallDev(self, ...)
 end))
 
+local hasHookedGC = false
+local originalSendRemote = nil
+
 DevTab:CreateToggle("啟用封包嗅探 (Packet Sniffer)", false, function(state)
     Toggles.PacketSniffer = state
     if state then
-        warn("[ZRN] 封包嗅探已啟動。請開槍擊中牆壁與敵人，並查看 F9 控制台。")
+        warn("[ZRN] 封包嗅探已啟動。")
+        
+        -- 利用 getgc 找出遊戲自定義的 SendRemote 函數並掛鉤
+        if not hasHookedGC then
+            for _, v in pairs(getgc(true)) do
+                if type(v) == "table" and rawget(v, "SendRemote") and type(rawget(v, "SendRemote")) == "function" then
+                    originalSendRemote = v.SendRemote
+                    v.SendRemote = function(self, id, data)
+                        if Toggles.PacketSniffer and IsShooting then
+                            print("====================================")
+                            print("[ZRN Sniffer] 🎯 攔截到 SendRemote (ID: " .. tostring(id) .. ")")
+                            if type(data) == "table" then
+                                for k, val in pairs(data) do
+                                    print("  - " .. tostring(k) .. " : " .. tostring(val))
+                                    if type(val) == "table" then
+                                        for k2, val2 in pairs(val) do
+                                            print("      > " .. tostring(k2) .. " : " .. tostring(val2))
+                                        end
+                                    end
+                                end
+                            else
+                                print("  Data: " .. tostring(data))
+                            end
+                            print("====================================")
+                        end
+                        return originalSendRemote(self, id, data)
+                    end
+                    hasHookedGC = true
+                    warn("[ZRN] 成功掛鉤底層 SendRemote 函數！")
+                    break
+                end
+            end
+            if not hasHookedGC then
+                warn("[ZRN] 找不到 SendRemote，可能已被混淆。")
+            end
+        end
+        
+        warn("[ZRN] 請開槍擊中牆壁與敵人，並查看 F9 控制台。")
     else
         warn("[ZRN] 封包嗅探已關閉。")
     end
