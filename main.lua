@@ -62,8 +62,8 @@ local function CreateSnow()
     snowPart.Transparency = 1
     snowPart.Anchored = true
     snowPart.CanCollide = false
-    -- 放在 Terrain 下面，絕對不會被遊戲清理腳本刪除，也保證可以被渲染
-    snowPart.Parent = Workspace.Terrain
+    -- 【安全防護】放在 Camera 裡，這是純客戶端容器，伺服器防作弊完全掃不到
+    snowPart.Parent = Camera
     
     local snowEmitter = Instance.new("ParticleEmitter")
     snowEmitter.Parent = snowPart
@@ -1112,7 +1112,8 @@ local function CreateTracer(origin, endPoint)
         tracer.Color = Color3.fromRGB(180, 50, 255) -- 耀眼的螢光紫
         tracer.Size = Vector3.new(0.15, 0.15, distance)
         tracer.CFrame = CFrame.new(origin, endPoint) * CFrame.new(0, 0, -distance / 2)
-        tracer.Parent = Workspace.Terrain
+        -- 【安全防護】放在 Camera 裡，避開 Workspace 實體掃描
+        tracer.Parent = Camera
         
         local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
         local tween = TweenService:Create(tracer, tweenInfo, {Transparency = 1, Size = Vector3.new(0, 0, distance)})
@@ -1123,60 +1124,53 @@ local function CreateTracer(origin, endPoint)
     end)
 end
 
-local successMT, errMT = pcall(function()
-    local mt = getrawmetatable(game)
-    local oldNamecall = mt.__namecall
-    setreadonly(mt, false)
+local oldNamecall
+oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    local args = {...}
 
-    mt.__namecall = newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        local args = {...}
-
-        if IsShooting and not checkcaller() then
-            if self == Workspace and method == "Raycast" then
-                local origin = args[1]
-                local direction = args[2]
-                if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
-                    local targetPart = CachedMagicBulletTargetPart
-                    local isMagic = Toggles.MagicBullet and targetPart
-                    
-                    if isMagic then
-                        direction = (targetPart.Position - origin).Unit * 1000
-                        args[2] = direction
-                    end
-                    
-                    CreateTracer(origin, origin + (direction.Unit * 250))
-                    
-                    if isMagic then
-                        return oldNamecall(self, unpack(args))
-                    end
+    if IsShooting and not checkcaller() then
+        if self == Workspace and method == "Raycast" then
+            local origin = args[1]
+            local direction = args[2]
+            if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
+                local targetPart = CachedMagicBulletTargetPart
+                local isMagic = Toggles.MagicBullet and targetPart
+                
+                if isMagic then
+                    direction = (targetPart.Position - origin).Unit * 1000
+                    args[2] = direction
                 end
-            elseif self == Workspace and (method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay") then
-                local origin = args[1].Origin
-                local direction = args[1].Direction
-                if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
-                    local targetPart = CachedMagicBulletTargetPart
-                    local isMagic = Toggles.MagicBullet and targetPart
-                    
-                    if isMagic then
-                        direction = (targetPart.Position - origin).Unit * 1000
-                        args[1] = Ray.new(origin, direction)
-                    end
-                    
-                    CreateTracer(origin, origin + (direction.Unit * 250))
-                    
-                    if isMagic then
-                        return oldNamecall(self, unpack(args))
-                    end
+                
+                CreateTracer(origin, origin + (direction.Unit * 250))
+                
+                if isMagic then
+                    return oldNamecall(self, unpack(args))
+                end
+            end
+        elseif self == Workspace and (method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay") then
+            local origin = args[1].Origin
+            local direction = args[1].Direction
+            if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
+                local targetPart = CachedMagicBulletTargetPart
+                local isMagic = Toggles.MagicBullet and targetPart
+                
+                if isMagic then
+                    direction = (targetPart.Position - origin).Unit * 1000
+                    args[1] = Ray.new(origin, direction)
+                end
+                
+                CreateTracer(origin, origin + (direction.Unit * 250))
+                
+                if isMagic then
+                    return oldNamecall(self, unpack(args))
                 end
             end
         end
+    end
 
-        return oldNamecall(self, ...)
-    end)
-
-    setreadonly(mt, true)
-end)
+    return oldNamecall(self, ...)
+end))
 
 --------------------------------------------------------------------------------
 -- 建立 UI 選單
