@@ -1357,62 +1357,64 @@ ExploitTab:CreateToggle("自動回血", false, function(state)
     Toggles.AutoHeal = state
 end)
 
-ExploitTab:CreateButton("解鎖武器穿透 (Weapon Mods)", function()
-    local count = 0
+ExploitTab:CreateButton("偵察武器結構 (Scan Modules)", function()
+    -- 步驟一：列出所有已載入的 ModuleScript 名稱與路徑
+    warn("[ZRN] ===== 開始偵察 =====")
     
-    -- 方法一：掃描所有已載入的 ModuleScript，尋找真正的武器設定檔
     local modules = getloadedmodules and getloadedmodules() or {}
+    warn("[ZRN] 找到 " .. #modules .. " 個已載入模組")
+    
+    local weaponRelated = {}
     for _, mod in pairs(modules) do
         pcall(function()
-            if mod:IsA("ModuleScript") then
-                local success, data = pcall(require, mod)
-                if success and type(data) == "table" then
-                    -- 只修改同時包含多個武器屬性的 Table (避免誤觸遊戲系統)
-                    local function tryModifyWeapon(tbl)
-                        if type(tbl) ~= "table" then return end
-                        local weaponKeys = {"Penetration", "Pierce", "Wallbang", "WallPenetration", "WallbangDamage"}
-                        for _, key in pairs(weaponKeys) do
-                            if rawget(tbl, key) ~= nil then
-                                pcall(function()
-                                    if setreadonly then setreadonly(tbl, false) end
-                                    rawset(tbl, key, 9999)
-                                end)
-                                count = count + 1
-                            end
-                        end
-                    end
-                    
-                    tryModifyWeapon(data)
-                    -- 也檢查子表 (有些遊戲把武器屬性放在嵌套結構裡)
-                    for k, v in pairs(data) do
-                        if type(v) == "table" then
-                            tryModifyWeapon(v)
-                        end
-                    end
-                end
+            local path = mod:GetFullName()
+            -- 列出所有模組路徑 (篩選可能跟武器/戰鬥有關的)
+            local lower = path:lower()
+            if lower:find("weapon") or lower:find("gun") or lower:find("bullet") or lower:find("damage") 
+                or lower:find("combat") or lower:find("shoot") or lower:find("fire") or lower:find("projectile")
+                or lower:find("config") or lower:find("stat") or lower:find("item") or lower:find("tool") then
+                table.insert(weaponRelated, path)
+                warn("[ZRN] 可疑模組: " .. path)
             end
         end)
     end
     
-    -- 方法二：用 getgc 補充掃描 (僅精準匹配同時有 Penetration 和 Damage 的 Table)
+    if #weaponRelated == 0 then
+        warn("[ZRN] 沒有找到明顯的武器模組名稱，嘗試列出所有模組...")
+        for i, mod in pairs(modules) do
+            pcall(function()
+                warn("[ZRN] 模組[" .. i .. "]: " .. mod:GetFullName())
+            end)
+            if i > 50 then break end -- 限制輸出量
+        end
+    end
+    
+    -- 步驟二：用 getgc 掃描記憶體中包含數值型 table 的結構
+    warn("[ZRN] ===== 掃描 getgc 中的武器候選 Table =====")
+    local candidates = 0
     for _, v in pairs(getgc(true)) do
-        if type(v) == "table" then
-            -- 必須同時包含 Penetration + Damage 才是武器，避免撞到 ReplicatedClass
-            if rawget(v, "Penetration") and rawget(v, "Damage") then
-                pcall(function()
-                    if setreadonly then setreadonly(v, false) end
-                    rawset(v, "Penetration", 9999)
-                    if rawget(v, "Pierce") then rawset(v, "Pierce", 9999) end
-                    if rawget(v, "Wallbang") then rawset(v, "Wallbang", 9999) end
-                    if rawget(v, "WallPenetration") then rawset(v, "WallPenetration", 9999) end
-                    if rawget(v, "WallbangDamage") then rawset(v, "WallbangDamage", 100) end
-                end)
-                count = count + 1
+        if type(v) == "table" and candidates < 15 then
+            -- 找包含數字值 (像傷害值) 且有字串 key 的 table
+            local numericCount = 0
+            local keys = {}
+            for k, val in pairs(v) do
+                if type(k) == "string" and (type(val) == "number" or type(val) == "boolean") then
+                    numericCount = numericCount + 1
+                    if numericCount <= 20 then
+                        table.insert(keys, tostring(k) .. "=" .. tostring(val))
+                    end
+                end
+            end
+            -- 只顯示有 5~30 個屬性的 table (武器設定通常在這個範圍)
+            if numericCount >= 5 and numericCount <= 30 then
+                warn("[ZRN] 候選 Table (" .. numericCount .. " 屬性): { " .. table.concat(keys, ", ") .. " }")
+                candidates = candidates + 1
             end
         end
     end
     
-    warn("[ZRN] 掃描完畢！共修改 " .. tostring(count) .. " 個武器穿透屬性。請隨便拿一把槍測試穿牆！")
+    warn("[ZRN] ===== 偵察完畢 (共 " .. candidates .. " 個候選) =====")
+    warn("[ZRN] 請截圖 F9 控制台的黃色文字，傳給開發者分析！")
 end)
 
 
