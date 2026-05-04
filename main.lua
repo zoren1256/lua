@@ -1376,23 +1376,31 @@ oldNamecallDev = hookmetamethod(game, "__namecall", newcclosure(function(self, .
     local method = getnamecallmethod()
     local args = {...}
     
-    if Toggles.PacketSniffer and not checkcaller() then
+    if Toggles.PacketSniffer and not checkcaller() and IsShooting then
         if method == "FireServer" or method == "InvokeServer" or method == "Fire" then
             if tostring(self):lower():find("network") or tostring(self) == "RemoteEvent" or tostring(self) == "RemoteFunction" then
-                print("====================================")
-                print("[ZRN Sniffer] 攔截到網路請求: ", tostring(self), " | Method: ", method)
-                print("[ZRN Sniffer] 參數列表:")
-                for i, v in pairs(args) do
-                    if type(v) == "table" then
-                        print("  Arg["..i.."]: [Table]")
-                        for k2, v2 in pairs(v) do
-                            print("    - " .. tostring(k2) .. " : " .. tostring(v2))
-                        end
-                    else
-                        print("  Arg["..i.."]: " .. type(v) .. " = " .. tostring(v))
-                    end
+                -- 簡單過濾掉常見的心跳/防作弊封包 (只有一個 table 且包含奇怪加密字串的通常是 ping)
+                local isPing = false
+                if #args == 1 and type(args[1]) == "table" and args[1][2] and type(args[1][2]) == "string" and string.len(args[1][2]) > 10 then
+                    isPing = true
                 end
-                print("====================================")
+                
+                if not isPing then
+                    print("====================================")
+                    print("[ZRN Sniffer] 💥 攔截到開火請求: ", tostring(self), " | Method: ", method)
+                    print("[ZRN Sniffer] 參數列表:")
+                    for i, v in pairs(args) do
+                        if type(v) == "table" then
+                            print("  Arg["..i.."]: [Table]")
+                            for k2, v2 in pairs(v) do
+                                print("    - " .. tostring(k2) .. " : " .. tostring(v2))
+                            end
+                        else
+                            print("  Arg["..i.."]: " .. type(v) .. " = " .. tostring(v))
+                        end
+                    end
+                    print("====================================")
+                end
             end
         end
     end
