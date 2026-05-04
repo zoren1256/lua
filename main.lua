@@ -1210,7 +1210,7 @@ local CombatTab = Window:CreateTab("戰鬥")
 
 CombatTab:CreateToggle("啟用自瞄 (右鍵觸發)", false, function(state) Toggles.Aimbot = state end)
 CombatTab:CreateToggle("傳統自動開槍 (需對準敵人)", false, function(state) Toggles.TriggerBot = state end)
-CombatTab:CreateToggle("智能開火 (配合靜默, 露頭即殺)", false, function(state) Toggles.SmartTrigger = state end)
+CombatTab:CreateToggle("智能自動射擊 (配合靜默)", false, function(state) Toggles.SmartTrigger = state end)
 CombatTab:CreateToggle("啟用靜默追蹤", false, function(state) Toggles.MagicBullet = state end)
 CombatTab:CreateToggle("限制鎖定範圍 (FOV)", true, function(state) Settings.AimbotUseFOV = state end)
 CombatTab:CreateToggle("啟用移動預判 (Prediction)", false, function(state) Settings.AimbotPrediction = state end)
