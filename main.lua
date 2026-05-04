@@ -1206,14 +1206,25 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
     local method = getnamecallmethod()
     local args = {...}
 
-    if method == "Play" and typeof(self) == "Instance" and self:IsA("Sound") and not checkcaller() then
+    -- 自訂檢查父節點函數，避免使用 :IsDescendantOf 污染 namecall method
+    local function checkDescendant(obj, target)
+        if not obj or not target then return false end
+        local current = obj
+        while current do
+            if current == target then return true end
+            current = current.Parent
+        end
+        return false
+    end
+
+    if method == "Play" and typeof(self) == "Instance" and self.ClassName == "Sound" and not checkcaller() then
         if Toggles.CustomGunSound then
             local soundName = self.Name:lower()
             -- 檢查是否為槍聲
             if soundName:find("fire") or soundName:find("shoot") or soundName:find("shot") or soundName:find("gun") or soundName:find("bang") then
                 -- 確保只改自己的槍聲
-                local inCamera = Workspace.CurrentCamera and self:IsDescendantOf(Workspace.CurrentCamera)
-                local inChar = LocalPlayer.Character and self:IsDescendantOf(LocalPlayer.Character)
+                local inCamera = Workspace.CurrentCamera and checkDescendant(self, Workspace.CurrentCamera)
+                local inChar = LocalPlayer.Character and checkDescendant(self, LocalPlayer.Character)
                 if inCamera or inChar then
                     -- 播放自己的獨立聲音，不要修改原始物件，避免觸發遊戲的反作弊或報錯
                     task.spawn(function()
