@@ -1378,7 +1378,10 @@ oldNamecallDev = hookmetamethod(game, "__namecall", newcclosure(function(self, .
     
     if Toggles.PacketSniffer and not checkcaller() and IsShooting then
         if method == "FireServer" or method == "InvokeServer" or method == "Fire" then
-            if tostring(self):lower():find("network") or tostring(self) == "RemoteEvent" or tostring(self) == "RemoteFunction" then
+            -- 只要是 FireServer 或 InvokeServer 就一定是網路請求
+            local isRemote = (typeof(self) == "Instance" and (self:IsA("RemoteEvent") or self:IsA("RemoteFunction") or self:IsA("BindableEvent"))) or type(self) == "table"
+            
+            if isRemote then
                 -- 簡單過濾掉常見的心跳/防作弊封包 (只有一個 table 且包含奇怪加密字串的通常是 ping)
                 local isPing = false
                 if #args == 1 and type(args[1]) == "table" and args[1][2] and type(args[1][2]) == "string" and string.len(args[1][2]) > 10 then
