@@ -1357,64 +1357,83 @@ ExploitTab:CreateToggle("自動回血", false, function(state)
     Toggles.AutoHeal = state
 end)
 
-ExploitTab:CreateButton("偵察武器結構 (Scan Modules)", function()
-    -- 步驟一：列出所有已載入的 ModuleScript 名稱與路徑
-    warn("[ZRN] ===== 開始偵察 =====")
+ExploitTab:CreateButton("深度偵察武器資料 (Deep Scan)", function()
+    warn("[ZRN] ===== 開始深度偵察 =====")
     
+    -- 深度印出 Table 結構 (最多 2 層)
+    local function deepDump(tbl, prefix, depth)
+        if type(tbl) ~= "table" or depth > 2 then return end
+        for k, v in pairs(tbl) do
+            local key = tostring(k)
+            if type(v) == "table" then
+                warn(prefix .. key .. " = [Table]")
+                if depth < 2 then
+                    deepDump(v, prefix .. "  ", depth + 1)
+                end
+            else
+                warn(prefix .. key .. " = " .. tostring(v) .. " (" .. type(v) .. ")")
+            end
+        end
+    end
+    
+    -- 目標一：ItemLibrary (武器資料庫)
     local modules = getloadedmodules and getloadedmodules() or {}
-    warn("[ZRN] 找到 " .. #modules .. " 個已載入模組")
-    
-    local weaponRelated = {}
     for _, mod in pairs(modules) do
         pcall(function()
             local path = mod:GetFullName()
-            -- 列出所有模組路徑 (篩選可能跟武器/戰鬥有關的)
-            local lower = path:lower()
-            if lower:find("weapon") or lower:find("gun") or lower:find("bullet") or lower:find("damage") 
-                or lower:find("combat") or lower:find("shoot") or lower:find("fire") or lower:find("projectile")
-                or lower:find("config") or lower:find("stat") or lower:find("item") or lower:find("tool") then
-                table.insert(weaponRelated, path)
-                warn("[ZRN] 可疑模組: " .. path)
+            
+            -- 精準鎖定 ItemLibrary
+            if path:find("ItemLibrary") and not path:find("SoundCallbacks") then
+                warn("[ZRN] ★★★ 找到 ItemLibrary: " .. path)
+                local success, data = pcall(require, mod)
+                if success then
+                    warn("[ZRN] ItemLibrary 類型: " .. type(data))
+                    if type(data) == "table" then
+                        local itemCount = 0
+                        for k, v in pairs(data) do
+                            itemCount = itemCount + 1
+                            if itemCount <= 3 then
+                                warn("[ZRN] 武器項目 [" .. tostring(k) .. "]:")
+                                deepDump(v, "  ", 0)
+                            end
+                        end
+                        warn("[ZRN] ItemLibrary 共有 " .. itemCount .. " 個項目")
+                    elseif type(data) == "function" then
+                        warn("[ZRN] ItemLibrary 回傳的是函數，無法直接讀取")
+                    end
+                else
+                    warn("[ZRN] 無法 require ItemLibrary: " .. tostring(data))
+                end
+            end
+            
+            -- 精準鎖定 ItemTypes.Gun
+            if path:find("ItemTypes") and path:find("Gun") and not path:find("Sound") then
+                warn("[ZRN] ★★★ 找到 Gun 模組: " .. path)
+                local success, data = pcall(require, mod)
+                if success then
+                    warn("[ZRN] Gun 模組類型: " .. type(data))
+                    if type(data) == "table" then
+                        deepDump(data, "  ", 0)
+                    end
+                end
+            end
+            
+            -- 精準鎖定 FireHitboxes
+            if path:find("FireHitboxes") then
+                warn("[ZRN] ★★★ 找到 FireHitboxes: " .. path)
+                local success, data = pcall(require, mod)
+                if success then
+                    warn("[ZRN] FireHitboxes 類型: " .. type(data))
+                    if type(data) == "table" then
+                        deepDump(data, "  ", 0)
+                    end
+                end
             end
         end)
     end
     
-    if #weaponRelated == 0 then
-        warn("[ZRN] 沒有找到明顯的武器模組名稱，嘗試列出所有模組...")
-        for i, mod in pairs(modules) do
-            pcall(function()
-                warn("[ZRN] 模組[" .. i .. "]: " .. mod:GetFullName())
-            end)
-            if i > 50 then break end -- 限制輸出量
-        end
-    end
-    
-    -- 步驟二：用 getgc 掃描記憶體中包含數值型 table 的結構
-    warn("[ZRN] ===== 掃描 getgc 中的武器候選 Table =====")
-    local candidates = 0
-    for _, v in pairs(getgc(true)) do
-        if type(v) == "table" and candidates < 15 then
-            -- 找包含數字值 (像傷害值) 且有字串 key 的 table
-            local numericCount = 0
-            local keys = {}
-            for k, val in pairs(v) do
-                if type(k) == "string" and (type(val) == "number" or type(val) == "boolean") then
-                    numericCount = numericCount + 1
-                    if numericCount <= 20 then
-                        table.insert(keys, tostring(k) .. "=" .. tostring(val))
-                    end
-                end
-            end
-            -- 只顯示有 5~30 個屬性的 table (武器設定通常在這個範圍)
-            if numericCount >= 5 and numericCount <= 30 then
-                warn("[ZRN] 候選 Table (" .. numericCount .. " 屬性): { " .. table.concat(keys, ", ") .. " }")
-                candidates = candidates + 1
-            end
-        end
-    end
-    
-    warn("[ZRN] ===== 偵察完畢 (共 " .. candidates .. " 個候選) =====")
-    warn("[ZRN] 請截圖 F9 控制台的黃色文字，傳給開發者分析！")
+    warn("[ZRN] ===== 深度偵察完畢 =====")
+    warn("[ZRN] 請截圖 F9 控制台的所有黃色文字！")
 end)
 
 
