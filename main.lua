@@ -35,7 +35,8 @@ local Toggles = {
     ThirdPerson = false,
     SpinBot = false,
     CustomMovement = false,
-    SmartTrigger = false
+    SmartTrigger = false,
+    Wallbang = false
 }
 
 local Settings = {
@@ -1164,6 +1165,15 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
                 if isMagic then
                     direction = (targetPart.Position - origin).Unit * 1000
                     args[2] = direction
+                    
+                    if Toggles.Wallbang then
+                        -- 強制穿牆：覆寫碰撞過濾器，讓射線「只」能打中目標玩家，直接無視所有牆壁
+                        local newParams = RaycastParams.new()
+                        newParams.FilterType = Enum.RaycastFilterType.Include or Enum.RaycastFilterType.Whitelist
+                        newParams.FilterDescendantsInstances = {targetPart.Parent}
+                        newParams.IgnoreWater = true
+                        args[3] = newParams
+                    end
                 end
                 
                 CreateTracer(origin, origin + (direction.Unit * 250))
@@ -1182,6 +1192,15 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
                 if isMagic then
                     direction = (targetPart.Position - origin).Unit * 1000
                     args[1] = Ray.new(origin, direction)
+                    
+                    if Toggles.Wallbang then
+                        -- 舊版射線的穿牆處理 (直接將 IgnoreList 設為整個 Workspace，除了目標)
+                        if method == "FindPartOnRayWithIgnoreList" then
+                            local ignoreList = args[2] or {}
+                            table.insert(ignoreList, Workspace.Map or Workspace.Terrain)
+                            args[2] = ignoreList
+                        end
+                    end
                 end
                 
                 CreateTracer(origin, origin + (direction.Unit * 250))
@@ -1212,6 +1231,7 @@ CombatTab:CreateToggle("啟用自瞄 (右鍵觸發)", false, function(state) Tog
 CombatTab:CreateToggle("傳統自動開槍 (需對準敵人)", false, function(state) Toggles.TriggerBot = state end)
 CombatTab:CreateToggle("智能自動射擊 (配合靜默)", false, function(state) Toggles.SmartTrigger = state end)
 CombatTab:CreateToggle("啟用靜默追蹤", false, function(state) Toggles.MagicBullet = state end)
+CombatTab:CreateToggle("強制穿牆 (Wallbang) [高風險]", false, function(state) Toggles.Wallbang = state end)
 CombatTab:CreateToggle("限制鎖定範圍 (FOV)", true, function(state) Settings.AimbotUseFOV = state end)
 CombatTab:CreateToggle("啟用移動預判 (Prediction)", false, function(state) Settings.AimbotPrediction = state end)
 CombatTab:CreateSlider("預判強度 (數字越大越往前)", 0, 20, 5, function(val) Settings.PredictionAmount = val / 100 end)
