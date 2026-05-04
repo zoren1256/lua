@@ -130,27 +130,27 @@ local function CreateSnow()
         end
         -- 強制在每一幀覆蓋遊戲的環境光與時間
         pcall(function()
-            Lighting.ClockTime = 0 -- 強制深夜 12 點
-            Lighting.Brightness = 0.5 -- 降低全局亮度
-            Lighting.Ambient = Color3.fromRGB(50, 55, 60)
-            Lighting.OutdoorAmbient = Color3.fromRGB(30, 35, 40)
-            Lighting.ColorShift_Top = Color3.fromRGB(0, 0, 0)
-            Lighting.ColorShift_Bottom = Color3.fromRGB(0, 0, 0)
+            Lighting.ClockTime = 0 -- 保持夜間，讓顏色更純粹
+            Lighting.Brightness = 2 -- 大幅提升全局亮度，解決太暗的問題
+            Lighting.Ambient = Color3.fromRGB(120, 80, 160) -- 紫色環境光
+            Lighting.OutdoorAmbient = Color3.fromRGB(90, 50, 130) -- 紫色戶外光
+            Lighting.ColorShift_Top = Color3.fromRGB(150, 50, 255)
+            Lighting.ColorShift_Bottom = Color3.fromRGB(150, 50, 255)
             
-            colorCorrection.Saturation = -0.4
-            colorCorrection.TintColor = Color3.fromRGB(220, 230, 255)
-            colorCorrection.Brightness = -0.1
+            colorCorrection.Saturation = 0.2 -- 增加飽和度讓紫色更艷麗
+            colorCorrection.TintColor = Color3.fromRGB(200, 150, 255) -- 紫色濾鏡
+            colorCorrection.Brightness = 0.1 -- 提升整體畫面亮度
             
             local atmo = Lighting:FindFirstChildOfClass("Atmosphere")
             if atmo then
-                atmo.Density = 0.95 -- 極度濃霧
-                atmo.Color = Color3.fromRGB(20, 20, 25) -- 黑色濃霧
+                atmo.Density = 0.8 -- 稍微調降一點霧氣密度讓視野好一點
+                atmo.Color = Color3.fromRGB(130, 40, 220) -- 妖豔的深紫色天空/霧氣
                 atmo.Glare = 0
                 atmo.Haze = 10
             else
-                Lighting.FogColor = Color3.fromRGB(20, 20, 25)
-                Lighting.FogStart = 0
-                Lighting.FogEnd = 80 -- 黑夜能見度更低
+                Lighting.FogColor = Color3.fromRGB(130, 40, 220)
+                Lighting.FogStart = 10
+                Lighting.FogEnd = 200 -- 延長能見度，避免全盲
             end
         end)
     end)
@@ -1223,32 +1223,38 @@ CharacterTab:CreateSlider("旋轉速度", 10, 100, 50, function(val) Settings.Sp
 
 local flying = false
 local flySpeed = 50
-local flyBodyVelocity = nil
 CharacterTab:CreateToggle("飛行模式 (Fly)", false, function(state)
     flying = state
-    if flying and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        flyBodyVelocity = Instance.new("BodyVelocity")
-        flyBodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-        flyBodyVelocity.Velocity = Vector3.new(0, 0, 0)
-        flyBodyVelocity.Parent = LocalPlayer.Character.HumanoidRootPart
-    else
-        if flyBodyVelocity then
-            flyBodyVelocity:Destroy()
-            flyBodyVelocity = nil
-        end
-    end
 end)
 
 -- 飛行與穿牆邏輯
 RunService.RenderStepped:Connect(function()
-    if flying and flyBodyVelocity and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-        local moveDir = LocalPlayer.Character.Humanoid.MoveDirection
+    if not LocalPlayer.Character then return end
+    local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    local hum = LocalPlayer.Character:FindFirstChild("Humanoid")
+    
+    if flying and hrp and hum then
+        local flyVelocity = hrp:FindFirstChild("ZRN_FlyVelocity")
+        if not flyVelocity then
+            flyVelocity = Instance.new("BodyVelocity")
+            flyVelocity.Name = "ZRN_FlyVelocity"
+            flyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            flyVelocity.Velocity = Vector3.new(0, 0, 0)
+            flyVelocity.Parent = hrp
+        end
+        
+        local moveDir = hum.MoveDirection
         if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
-            flyBodyVelocity.Velocity = Vector3.new(0, flySpeed, 0) + (moveDir * flySpeed)
+            flyVelocity.Velocity = Vector3.new(0, flySpeed, 0) + (moveDir * flySpeed)
         elseif UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
-            flyBodyVelocity.Velocity = Vector3.new(0, -flySpeed, 0) + (moveDir * flySpeed)
+            flyVelocity.Velocity = Vector3.new(0, -flySpeed, 0) + (moveDir * flySpeed)
         else
-            flyBodyVelocity.Velocity = moveDir * flySpeed
+            flyVelocity.Velocity = moveDir * flySpeed
+        end
+    else
+        if hrp then
+            local flyVelocity = hrp:FindFirstChild("ZRN_FlyVelocity")
+            if flyVelocity then flyVelocity:Destroy() end
         end
     end
 end)
