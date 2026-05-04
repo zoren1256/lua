@@ -1101,11 +1101,16 @@ RunService.RenderStepped:Connect(function()
         end
     end
     
-    -- 第三人稱視角 (Third Person)
+end)
+
+-- 第三人稱視角 (Third Person) 強制覆蓋遊戲相機腳本
+RunService:BindToRenderStep("ZRN_ThirdPerson", Enum.RenderPriority.Camera.Value + 10, function()
     if Toggles.ThirdPerson and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head") then
-        local head = LocalPlayer.Character.Head
-        -- 將相機往後拉，創造第三人稱視角
-        Camera.CFrame = Camera.CFrame * CFrame.new(0, 1.5, Settings.ThirdPersonDist or 10)
+        local Camera = Workspace.CurrentCamera
+        if Camera then
+            -- 將相機強制往後拉，創造第三人稱視角 (無死角覆蓋)
+            Camera.CFrame = Camera.CFrame * CFrame.new(0, 1.5, Settings.ThirdPersonDist or 10)
+        end
         
         -- 強制顯示自己的身體 (解決第一人稱會隱藏身體的問題)
         for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
@@ -1299,8 +1304,21 @@ RunService.RenderStepped:Connect(function(deltaTime)
     
     -- 自動旋轉 (SpinBot)
     if Toggles.SpinBot and hrp then
-        spinAngle = spinAngle + (Settings.SpinSpeed * deltaTime)
-        hrp.CFrame = CFrame.new(hrp.Position) * CFrame.Angles(0, math.rad(spinAngle * 10), 0)
+        local spinVelo = hrp:FindFirstChild("ZRN_Spin")
+        if not spinVelo then
+            spinVelo = Instance.new("BodyAngularVelocity")
+            spinVelo.Name = "ZRN_Spin"
+            spinVelo.MaxTorque = Vector3.new(0, math.huge, 0)
+            spinVelo.AngularVelocity = Vector3.new(0, Settings.SpinSpeed, 0)
+            spinVelo.Parent = hrp
+        else
+            spinVelo.AngularVelocity = Vector3.new(0, Settings.SpinSpeed, 0)
+        end
+    else
+        if hrp then
+            local spinVelo = hrp:FindFirstChild("ZRN_Spin")
+            if spinVelo then spinVelo:Destroy() end
+        end
     end
     
     -- 自訂移動 (強制鎖定速度與跳躍高度，防止遊戲覆蓋)
@@ -1311,17 +1329,7 @@ RunService.RenderStepped:Connect(function(deltaTime)
     end
 end)
 
-CharacterTab:CreateToggle("強制第三人稱", false, function(state)
-    if state then
-        LocalPlayer.CameraMode = Enum.CameraMode.Classic
-        LocalPlayer.CameraMaxZoomDistance = 100
-        LocalPlayer.CameraMinZoomDistance = 10
-    else
-        LocalPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
-        LocalPlayer.CameraMaxZoomDistance = 0.5
-        LocalPlayer.CameraMinZoomDistance = 0.5
-    end
-end)
+
 
 CharacterTab:CreateToggle("角色穿牆 (Noclip)", false, function(state)
     Toggles.Noclip = state
