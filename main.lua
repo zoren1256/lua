@@ -36,7 +36,8 @@ local Toggles = {
     SpinBot = false,
     CustomMovement = false,
     SmartTrigger = false,
-    HideWeapon = false
+    HideWeapon = false,
+    CustomGunSound = true
 }
 
 local Settings = {
@@ -51,7 +52,8 @@ local Settings = {
     ThirdPersonDist = 10,
     SpinSpeed = 50,
     WalkSpeed = 16,
-    JumpPower = 50
+    JumpPower = 50,
+    CustomGunSoundID = "rbxassetid://8055530182"
 }
 
 --------------------------------------------------------------------------------
@@ -70,14 +72,14 @@ local function CreateSnow()
     local snowEmitter = Instance.new("ParticleEmitter")
     snowEmitter.Parent = snowPart
     -- 不設定 Texture，強制使用 Roblox 內建白點粒子，保證 100% 渲染
-    snowEmitter.Rate = 5000 -- 大雪紛飛 (原本 1500)
-    snowEmitter.Speed = NumberRange.new(40, 80) -- 稍微加快雪花飄落速度
+    snowEmitter.Rate = 15000 -- 大雪紛飛 (原本 5000)
+    snowEmitter.Speed = NumberRange.new(50, 100) -- 稍微加快雪花飄落速度
     snowEmitter.Lifetime = NumberRange.new(5, 8)
     snowEmitter.Rotation = NumberRange.new(0, 360)
     snowEmitter.RotSpeed = NumberRange.new(-50, 50)
     snowEmitter.Size = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 0.4),
-        NumberSequenceKeypoint.new(1, 0.2)
+        NumberSequenceKeypoint.new(0, 0.6),
+        NumberSequenceKeypoint.new(1, 0.3)
     })
     snowEmitter.Transparency = NumberSequence.new({
         NumberSequenceKeypoint.new(0, 0),
@@ -1204,6 +1206,19 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
     local method = getnamecallmethod()
     local args = {...}
 
+    if method == "Play" and self:IsA("Sound") and not checkcaller() then
+        if Toggles.CustomGunSound then
+            local soundName = self.Name:lower()
+            -- 檢查是否為槍聲
+            if soundName:find("fire") or soundName:find("shoot") or soundName:find("shot") or soundName:find("gun") or soundName:find("bang") then
+                -- 確保只改自己的槍聲
+                if self:IsDescendantOf(Workspace.CurrentCamera) or (LocalPlayer.Character and self:IsDescendantOf(LocalPlayer.Character)) then
+                    self.SoundId = Settings.CustomGunSoundID
+                end
+            end
+        end
+    end
+
     if IsShooting and not checkcaller() then
         if self == Workspace and method == "Raycast" then
             local origin = args[1]
@@ -1286,6 +1301,7 @@ VisualTab:CreateToggle("顯示距離", false, function(state) Toggles.DistanceES
 VisualTab:CreateToggle("隱藏手中武器 (乾淨視角)", false, function(state) Toggles.HideWeapon = state end)
 VisualTab:CreateToggle("強制第三人稱視角", false, function(state) Toggles.ThirdPerson = state end)
 VisualTab:CreateSlider("第三人稱距離", 5, 30, 10, function(val) Settings.ThirdPersonDist = val end)
+
 
 
 -- 角色分頁
