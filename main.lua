@@ -35,7 +35,8 @@ local Toggles = {
     ThirdPerson = false,
     SpinBot = false,
     CustomMovement = false,
-    SmartTrigger = false
+    SmartTrigger = false,
+    HideWeapon = false
 }
 
 local Settings = {
@@ -1006,8 +1007,46 @@ UserInputService.InputEnded:Connect(function(input, gpe)
 end)
 
 local CachedMagicBulletTargetPart = nil
+local wasWeaponHidden = false
 
 RunService.RenderStepped:Connect(function()
+    -- 隱藏第一人稱武器與手臂 (乾淨視角)
+    if Toggles.HideWeapon then
+        wasWeaponHidden = true
+        local Camera = Workspace.CurrentCamera
+        if Camera then
+            for _, obj in pairs(Camera:GetDescendants()) do
+                if obj:IsA("BasePart") then obj.LocalTransparencyModifier = 1 end
+            end
+        end
+        if LocalPlayer.Character then
+            for _, tool in pairs(LocalPlayer.Character:GetChildren()) do
+                if tool:IsA("Tool") then
+                    for _, part in pairs(tool:GetDescendants()) do
+                        if part:IsA("BasePart") then part.LocalTransparencyModifier = 1 end
+                    end
+                end
+            end
+        end
+    elseif wasWeaponHidden then
+        wasWeaponHidden = false
+        local Camera = Workspace.CurrentCamera
+        if Camera then
+            for _, obj in pairs(Camera:GetDescendants()) do
+                if obj:IsA("BasePart") then obj.LocalTransparencyModifier = 0 end
+            end
+        end
+        if LocalPlayer.Character then
+            for _, tool in pairs(LocalPlayer.Character:GetChildren()) do
+                if tool:IsA("Tool") then
+                    for _, part in pairs(tool:GetDescendants()) do
+                        if part:IsA("BasePart") then part.LocalTransparencyModifier = 0 end
+                    end
+                end
+            end
+        end
+    end
+
     -- 穿牆子彈目標快取 (每秒 60 次，取代在 __namecall 中每秒幾萬次的運算)
     if Toggles.MagicBullet then
         local target = getClosestPlayer()
@@ -1232,6 +1271,7 @@ VisualTab:CreateToggle("顯示外框透視", false, function(state) Toggles.BoxE
 VisualTab:CreateToggle("顯示玩家名稱", false, function(state) Toggles.NameESP = state end)
 VisualTab:CreateToggle("顯示血量資訊", false, function(state) Toggles.HealthESP = state end)
 VisualTab:CreateToggle("顯示距離", false, function(state) Toggles.DistanceESP = state end)
+VisualTab:CreateToggle("隱藏手中武器 (乾淨視角)", false, function(state) Toggles.HideWeapon = state end)
 VisualTab:CreateToggle("強制第三人稱視角", false, function(state) Toggles.ThirdPerson = state end)
 VisualTab:CreateSlider("第三人稱距離", 5, 30, 10, function(val) Settings.ThirdPersonDist = val end)
 
