@@ -1357,83 +1357,8 @@ ExploitTab:CreateToggle("自動回血", false, function(state)
     Toggles.AutoHeal = state
 end)
 
-ExploitTab:CreateButton("深度偵察武器資料 (Deep Scan)", function()
-    warn("[ZRN] ===== 開始深度偵察 =====")
-    
-    -- 深度印出 Table 結構 (最多 2 層)
-    local function deepDump(tbl, prefix, depth)
-        if type(tbl) ~= "table" or depth > 2 then return end
-        for k, v in pairs(tbl) do
-            local key = tostring(k)
-            if type(v) == "table" then
-                warn(prefix .. key .. " = [Table]")
-                if depth < 2 then
-                    deepDump(v, prefix .. "  ", depth + 1)
-                end
-            else
-                warn(prefix .. key .. " = " .. tostring(v) .. " (" .. type(v) .. ")")
-            end
-        end
-    end
-    
-    -- 目標一：ItemLibrary (武器資料庫)
-    local modules = getloadedmodules and getloadedmodules() or {}
-    for _, mod in pairs(modules) do
-        pcall(function()
-            local path = mod:GetFullName()
-            
-            -- 精準鎖定 ItemLibrary
-            if path:find("ItemLibrary") and not path:find("SoundCallbacks") then
-                warn("[ZRN] ★★★ 找到 ItemLibrary: " .. path)
-                local success, data = pcall(require, mod)
-                if success then
-                    warn("[ZRN] ItemLibrary 類型: " .. type(data))
-                    if type(data) == "table" then
-                        local itemCount = 0
-                        for k, v in pairs(data) do
-                            itemCount = itemCount + 1
-                            if itemCount <= 3 then
-                                warn("[ZRN] 武器項目 [" .. tostring(k) .. "]:")
-                                deepDump(v, "  ", 0)
-                            end
-                        end
-                        warn("[ZRN] ItemLibrary 共有 " .. itemCount .. " 個項目")
-                    elseif type(data) == "function" then
-                        warn("[ZRN] ItemLibrary 回傳的是函數，無法直接讀取")
-                    end
-                else
-                    warn("[ZRN] 無法 require ItemLibrary: " .. tostring(data))
-                end
-            end
-            
-            -- 精準鎖定 ItemTypes.Gun
-            if path:find("ItemTypes") and path:find("Gun") and not path:find("Sound") then
-                warn("[ZRN] ★★★ 找到 Gun 模組: " .. path)
-                local success, data = pcall(require, mod)
-                if success then
-                    warn("[ZRN] Gun 模組類型: " .. type(data))
-                    if type(data) == "table" then
-                        deepDump(data, "  ", 0)
-                    end
-                end
-            end
-            
-            -- 精準鎖定 FireHitboxes
-            if path:find("FireHitboxes") then
-                warn("[ZRN] ★★★ 找到 FireHitboxes: " .. path)
-                local success, data = pcall(require, mod)
-                if success then
-                    warn("[ZRN] FireHitboxes 類型: " .. type(data))
-                    if type(data) == "table" then
-                        deepDump(data, "  ", 0)
-                    end
-                end
-            end
-        end)
-    end
-    
-    warn("[ZRN] ===== 深度偵察完畢 =====")
-    warn("[ZRN] 請截圖 F9 控制台的所有黃色文字！")
+ExploitTab:CreateButton("自動回血", function()
+    -- placeholder
 end)
 
 
