@@ -1010,42 +1010,6 @@ local CachedMagicBulletTargetPart = nil
 local wasWeaponHidden = false
 
 RunService.RenderStepped:Connect(function()
-    -- 隱藏第一人稱武器與手臂 (乾淨視角)
-    if Toggles.HideWeapon then
-        wasWeaponHidden = true
-        local Camera = Workspace.CurrentCamera
-        if Camera then
-            for _, obj in pairs(Camera:GetDescendants()) do
-                if obj:IsA("BasePart") then obj.LocalTransparencyModifier = 1 end
-            end
-        end
-        if LocalPlayer.Character then
-            for _, tool in pairs(LocalPlayer.Character:GetChildren()) do
-                if tool:IsA("Tool") then
-                    for _, part in pairs(tool:GetDescendants()) do
-                        if part:IsA("BasePart") then part.LocalTransparencyModifier = 1 end
-                    end
-                end
-            end
-        end
-    elseif wasWeaponHidden then
-        wasWeaponHidden = false
-        local Camera = Workspace.CurrentCamera
-        if Camera then
-            for _, obj in pairs(Camera:GetDescendants()) do
-                if obj:IsA("BasePart") then obj.LocalTransparencyModifier = 0 end
-            end
-        end
-        if LocalPlayer.Character then
-            for _, tool in pairs(LocalPlayer.Character:GetChildren()) do
-                if tool:IsA("Tool") then
-                    for _, part in pairs(tool:GetDescendants()) do
-                        if part:IsA("BasePart") then part.LocalTransparencyModifier = 0 end
-                    end
-                end
-            end
-        end
-    end
 
     -- 穿牆子彈目標快取 (每秒 60 次，取代在 __namecall 中每秒幾萬次的運算)
     if Toggles.MagicBullet then
@@ -1155,6 +1119,55 @@ RunService:BindToRenderStep("ZRN_ThirdPerson", Enum.RenderPriority.Camera.Value 
         for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
             if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
                 part.LocalTransparencyModifier = 0
+            end
+        end
+    end
+    end
+end)
+
+local wasWeaponHidden = false
+-- 隱藏第一人稱武器與手臂 (強制覆蓋遊戲渲染)
+RunService:BindToRenderStep("ZRN_HideWeapon", Enum.RenderPriority.Camera.Value + 20, function()
+    if Toggles.HideWeapon then
+        wasWeaponHidden = true
+        local Camera = Workspace.CurrentCamera
+        if Camera then
+            for _, obj in pairs(Camera:GetDescendants()) do
+                if obj:IsA("BasePart") then 
+                    obj.LocalTransparencyModifier = 1 
+                elseif obj:IsA("Decal") or obj:IsA("Texture") then
+                    obj.Transparency = 1
+                end
+            end
+        end
+        if LocalPlayer.Character then
+            for _, tool in pairs(LocalPlayer.Character:GetChildren()) do
+                if tool:IsA("Tool") then
+                    for _, part in pairs(tool:GetDescendants()) do
+                        if part:IsA("BasePart") then part.LocalTransparencyModifier = 1 end
+                    end
+                end
+            end
+        end
+    elseif wasWeaponHidden then
+        wasWeaponHidden = false
+        local Camera = Workspace.CurrentCamera
+        if Camera then
+            for _, obj in pairs(Camera:GetDescendants()) do
+                if obj:IsA("BasePart") then 
+                    obj.LocalTransparencyModifier = 0 
+                elseif obj:IsA("Decal") or obj:IsA("Texture") then
+                    obj.Transparency = 0
+                end
+            end
+        end
+        if LocalPlayer.Character then
+            for _, tool in pairs(LocalPlayer.Character:GetChildren()) do
+                if tool:IsA("Tool") then
+                    for _, part in pairs(tool:GetDescendants()) do
+                        if part:IsA("BasePart") then part.LocalTransparencyModifier = 0 end
+                    end
+                end
             end
         end
     end
@@ -1375,64 +1388,52 @@ CharacterTab:CreateToggle("角色穿牆 (Noclip)", false, function(state)
     Toggles.Noclip = state
 end)
 
--- 強制動作 (Force Emote)
-local EmoteList = {
-    ["跳舞 (Dance)"] = "rbxassetid://507771019",
-    ["揮手 (Wave)"] = "rbxassetid://507770239",
-    ["指點 (Point)"] = "rbxassetid://507770453",
-    ["歡呼 (Cheer)"] = "rbxassetid://507770677",
-    ["大笑 (Laugh)"] = "rbxassetid://507770818",
-    ["甩手舞 (Floss) [付費]"] = "rbxassetid://5917459365",
-    ["忍者舞 (Ninja) [付費]"] = "rbxassetid://5917482811",
-    ["炒熱氣氛 (Hype) [付費]"] = "rbxassetid://3696763610",
-    ["地板動作 (Top Rock) [付費]"] = "rbxassetid://5917477682",
-    ["神級舞蹈 (Godlike) [付費]"] = "rbxassetid://3333331310",
-    ["瑞克搖 (Rickroll) [付費]"] = "rbxassetid://8155982855"
-}
+-- 懸浮打坐 (Hover Meditate) - 純腳本強制動作
+local HoverMeditating = false
 
-local EmoteOptions = {
-    "跳舞 (Dance)", "揮手 (Wave)", "指點 (Point)", "歡呼 (Cheer)", "大笑 (Laugh)",
-    "甩手舞 (Floss) [付費]", "忍者舞 (Ninja) [付費]", "炒熱氣氛 (Hype) [付費]", 
-    "地板動作 (Top Rock) [付費]", "神級舞蹈 (Godlike) [付費]", "瑞克搖 (Rickroll) [付費]"
-}
-
-local SelectedEmote = "跳舞 (Dance)"
-local CurrentEmoteTrack = nil
-
-CharacterTab:CreateDropdown("選擇動作", EmoteOptions, "跳舞 (Dance)", function(val)
-    SelectedEmote = val
-end)
-
-CharacterTab:CreateButton("播放選定動作", function()
-    local char = LocalPlayer.Character
-    if not char then return end
-    local hum = char:FindFirstChild("Humanoid")
-    if not hum then return end
-    
-    local animator = hum:FindFirstChildOfClass("Animator")
-    if not animator then
-        animator = Instance.new("Animator")
-        animator.Parent = hum
-    end
-    
-    if CurrentEmoteTrack then
-        CurrentEmoteTrack:Stop()
-        CurrentEmoteTrack = nil
-    end
-    
-    local animId = EmoteList[SelectedEmote]
-    if animId then
-        local anim = Instance.new("Animation")
-        anim.AnimationId = animId
-        CurrentEmoteTrack = animator:LoadAnimation(anim)
-        CurrentEmoteTrack:Play()
+CharacterTab:CreateToggle("懸浮打坐 (Hover Meditate)", false, function(state)
+    HoverMeditating = state
+    if not state then
+        local char = LocalPlayer.Character
+        if char and char:FindFirstChild("Humanoid") then
+            char.Humanoid.HipHeight = 2 -- 恢復正常高度
+        end
     end
 end)
 
-CharacterTab:CreateButton("停止動作", function()
-    if CurrentEmoteTrack then
-        CurrentEmoteTrack:Stop()
-        CurrentEmoteTrack = nil
+RunService.Stepped:Connect(function()
+    if HoverMeditating then
+        local char = LocalPlayer.Character
+        if not char then return end
+        
+        local hum = char:FindFirstChild("Humanoid")
+        if hum then
+            hum.HipHeight = 5 -- 強制懸空 5 Studs
+        end
+        
+        -- 強制覆蓋 R15 關節角度 (打坐姿勢)
+        local isR15 = char:FindFirstChild("UpperTorso") ~= nil
+        if isR15 then
+            local rHip = char:FindFirstChild("RightUpperLeg") and char.RightUpperLeg:FindFirstChild("RightHip")
+            local lHip = char:FindFirstChild("LeftUpperLeg") and char.LeftUpperLeg:FindFirstChild("LeftHip")
+            local rKnee = char:FindFirstChild("RightLowerLeg") and char.RightLowerLeg:FindFirstChild("RightKnee")
+            local lKnee = char:FindFirstChild("LeftLowerLeg") and char.LeftLowerLeg:FindFirstChild("LeftKnee")
+            local rShoulder = char:FindFirstChild("RightUpperArm") and char.RightUpperArm:FindFirstChild("RightShoulder")
+            local lShoulder = char:FindFirstChild("LeftUpperArm") and char.LeftUpperArm:FindFirstChild("LeftShoulder")
+            local rElbow = char:FindFirstChild("RightLowerArm") and char.RightLowerArm:FindFirstChild("RightElbow")
+            local lElbow = char:FindFirstChild("LeftLowerArm") and char.LeftLowerArm:FindFirstChild("LeftElbow")
+            local waist = char:FindFirstChild("UpperTorso") and char.UpperTorso:FindFirstChild("Waist")
+            
+            if rHip then rHip.Transform = CFrame.Angles(math.rad(90), 0, math.rad(45)) end
+            if lHip then lHip.Transform = CFrame.Angles(math.rad(90), 0, math.rad(-45)) end
+            if rKnee then rKnee.Transform = CFrame.Angles(math.rad(-110), 0, 0) end
+            if lKnee then lKnee.Transform = CFrame.Angles(math.rad(-110), 0, 0) end
+            if rShoulder then rShoulder.Transform = CFrame.Angles(math.rad(-20), 0, math.rad(20)) end
+            if lShoulder then lShoulder.Transform = CFrame.Angles(math.rad(-20), 0, math.rad(-20)) end
+            if rElbow then rElbow.Transform = CFrame.Angles(math.rad(60), 0, 0) end
+            if lElbow then lElbow.Transform = CFrame.Angles(math.rad(60), 0, 0) end
+            if waist then waist.Transform = CFrame.Angles(math.rad(-10), 0, 0) end
+        end
     end
 end)
 
