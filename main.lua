@@ -1122,7 +1122,6 @@ RunService:BindToRenderStep("ZRN_ThirdPerson", Enum.RenderPriority.Camera.Value 
             end
         end
     end
-    end
 end)
 
 local wasWeaponHidden = false
