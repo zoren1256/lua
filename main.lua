@@ -31,7 +31,10 @@ local Toggles = {
     MagicBullet = false,
     InfiniteAmmo = false,
     AutoHeal = false,
-    TriggerBot = false
+    TriggerBot = false,
+    ThirdPerson = false,
+    SpinBot = false,
+    CustomMovement = false
 }
 
 local Settings = {
@@ -42,7 +45,11 @@ local Settings = {
     AimbotPrediction = false,
     PredictionAmount = 0.05,
     BulletDrop = 0,
-    HitboxSize = 5
+    HitboxSize = 5,
+    ThirdPersonDist = 10,
+    SpinSpeed = 50,
+    WalkSpeed = 16,
+    JumpPower = 50
 }
 
 --------------------------------------------------------------------------------
@@ -61,8 +68,8 @@ local function CreateSnow()
     local snowEmitter = Instance.new("ParticleEmitter")
     snowEmitter.Parent = snowPart
     -- 不設定 Texture，強制使用 Roblox 內建白點粒子，保證 100% 渲染
-    snowEmitter.Rate = 1500
-    snowEmitter.Speed = NumberRange.new(30, 60)
+    snowEmitter.Rate = 5000 -- 大雪紛飛 (原本 1500)
+    snowEmitter.Speed = NumberRange.new(40, 80) -- 稍微加快雪花飄落速度
     snowEmitter.Lifetime = NumberRange.new(5, 8)
     snowEmitter.Rotation = NumberRange.new(0, 360)
     snowEmitter.RotSpeed = NumberRange.new(-50, 50)
@@ -82,15 +89,31 @@ local function CreateSnow()
     local Lighting = game:GetService("Lighting")
     
 
-    -- 強制移除遊戲本身的 Skybox，以防 FFlag 沒生效
-    local function removeSky()
+    -- 建立一個純黑無星空的 Skybox 覆蓋遊戲原本的天空
+    local customSky = Lighting:FindFirstChild("ZRNSky")
+    if not customSky then
+        customSky = Instance.new("Sky")
+        customSky.Name = "ZRNSky"
+        customSky.SkyboxBk = ""
+        customSky.SkyboxDn = ""
+        customSky.SkyboxFt = ""
+        customSky.SkyboxLf = ""
+        customSky.SkyboxRt = ""
+        customSky.SkyboxUp = ""
+        customSky.StarCount = 0 -- 關閉星星
+        customSky.CelestialBodiesShown = false -- 關閉太陽與月亮
+        customSky.Parent = Lighting
+    end
+    
+    -- 強制移除遊戲本身其他的 Skybox，確保我們的純黑天空生效
+    local function removeOtherSkies()
         for _, v in pairs(Lighting:GetChildren()) do
-            if v:IsA("Sky") then v:Destroy() end
+            if v:IsA("Sky") and v.Name ~= "ZRNSky" then v:Destroy() end
         end
     end
-    removeSky()
+    removeOtherSkies()
     Lighting.ChildAdded:Connect(function(v)
-        if v:IsA("Sky") then task.wait() v:Destroy() end
+        if v:IsA("Sky") and v.Name ~= "ZRNSky" then task.wait() v:Destroy() end
     end)
     
     -- 加入冷色調濾鏡 (保留雪天的冷峻氛圍)
@@ -105,12 +128,14 @@ local function CreateSnow()
         if Camera then
             snowPart.CFrame = Camera.CFrame * CFrame.new(0, 50, 0)
         end
-        -- 強制在每一幀覆蓋遊戲的環境光 (包含新型的 Atmosphere)
+        -- 強制在每一幀覆蓋遊戲的環境光與時間
         pcall(function()
-            Lighting.Ambient = Color3.fromRGB(150, 160, 180)
-            Lighting.OutdoorAmbient = Color3.fromRGB(120, 130, 150)
-            Lighting.ColorShift_Top = Color3.fromRGB(100, 110, 120)
-            Lighting.ColorShift_Bottom = Color3.fromRGB(100, 110, 120)
+            Lighting.ClockTime = 0 -- 強制深夜 12 點
+            Lighting.Brightness = 0.5 -- 降低全局亮度
+            Lighting.Ambient = Color3.fromRGB(50, 55, 60)
+            Lighting.OutdoorAmbient = Color3.fromRGB(30, 35, 40)
+            Lighting.ColorShift_Top = Color3.fromRGB(0, 0, 0)
+            Lighting.ColorShift_Bottom = Color3.fromRGB(0, 0, 0)
             
             colorCorrection.Saturation = -0.4
             colorCorrection.TintColor = Color3.fromRGB(220, 230, 255)
@@ -118,13 +143,14 @@ local function CreateSnow()
             
             local atmo = Lighting:FindFirstChildOfClass("Atmosphere")
             if atmo then
-                atmo.Density = 0.8
-                atmo.Color = Color3.fromRGB(140, 150, 170)
+                atmo.Density = 0.95 -- 極度濃霧
+                atmo.Color = Color3.fromRGB(20, 20, 25) -- 黑色濃霧
                 atmo.Glare = 0
-                atmo.Haze = 5
+                atmo.Haze = 10
             else
-                Lighting.FogColor = Color3.fromRGB(140, 150, 170)
-                Lighting.FogEnd = 250
+                Lighting.FogColor = Color3.fromRGB(20, 20, 25)
+                Lighting.FogStart = 0
+                Lighting.FogEnd = 80 -- 黑夜能見度更低
             end
         end)
     end)
@@ -1055,11 +1081,48 @@ RunService.RenderStepped:Connect(function()
             end
         end
     end
+    
+    -- 第三人稱視角 (Third Person)
+    if Toggles.ThirdPerson and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head") then
+        local head = LocalPlayer.Character.Head
+        -- 將相機往後拉，創造第三人稱視角
+        Camera.CFrame = Camera.CFrame * CFrame.new(0, 1.5, Settings.ThirdPersonDist or 10)
+        
+        -- 強制顯示自己的身體 (解決第一人稱會隱藏身體的問題)
+        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                part.LocalTransparencyModifier = 0
+            end
+        end
+    end
 end)
 
 --------------------------------------------------------------------------------
 -- 靜默追蹤
 --------------------------------------------------------------------------------
+local function CreateTracer(origin, endPoint)
+    task.spawn(function()
+        local distance = (endPoint - origin).Magnitude
+        local tracer = Instance.new("Part")
+        tracer.Name = "ZRN_Tracer"
+        tracer.Anchored = true
+        tracer.CanCollide = false
+        tracer.Transparency = 0.2
+        tracer.Material = Enum.Material.Neon
+        tracer.Color = Color3.fromRGB(180, 50, 255) -- 耀眼的螢光紫
+        tracer.Size = Vector3.new(0.15, 0.15, distance)
+        tracer.CFrame = CFrame.new(origin, endPoint) * CFrame.new(0, 0, -distance / 2)
+        tracer.Parent = Workspace.Terrain
+        
+        local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        local tween = TweenService:Create(tracer, tweenInfo, {Transparency = 1, Size = Vector3.new(0, 0, distance)})
+        tween:Play()
+        
+        task.wait(0.5)
+        tracer:Destroy()
+    end)
+end
+
 local successMT, errMT = pcall(function()
     local mt = getrawmetatable(game)
     local oldNamecall = mt.__namecall
@@ -1069,28 +1132,40 @@ local successMT, errMT = pcall(function()
         local method = getnamecallmethod()
         local args = {...}
 
-        if Toggles.MagicBullet and IsShooting and not checkcaller() then
-            local targetPart = CachedMagicBulletTargetPart
-            if targetPart then
-                if self == Workspace and method == "Raycast" then
-                    local origin = args[1]
-                    local direction = args[2]
-                    -- 攔截射擊射線
-                    if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
-                        -- 極簡暴力解法：保持原點 (Origin) 不變以繞過反作弊原點檢查，
-                        -- 直接將射線方向 (Direction) 強制鎖死指向敵人的部位。
-                        local newDirection = (targetPart.Position - origin).Unit * 1000
-                        args[2] = newDirection
-                        
+        if IsShooting and not checkcaller() then
+            if self == Workspace and method == "Raycast" then
+                local origin = args[1]
+                local direction = args[2]
+                if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
+                    local targetPart = CachedMagicBulletTargetPart
+                    local isMagic = Toggles.MagicBullet and targetPart
+                    
+                    if isMagic then
+                        direction = (targetPart.Position - origin).Unit * 1000
+                        args[2] = direction
+                    end
+                    
+                    CreateTracer(origin, origin + (direction.Unit * 250))
+                    
+                    if isMagic then
                         return oldNamecall(self, unpack(args))
                     end
-                elseif self == Workspace and (method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay") then
-                    local origin = args[1].Origin
-                    local direction = args[1].Direction
-                    if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
-                        local newDirection = (targetPart.Position - origin).Unit * 1000
-                        args[1] = Ray.new(origin, newDirection)
-                        
+                end
+            elseif self == Workspace and (method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay") then
+                local origin = args[1].Origin
+                local direction = args[1].Direction
+                if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
+                    local targetPart = CachedMagicBulletTargetPart
+                    local isMagic = Toggles.MagicBullet and targetPart
+                    
+                    if isMagic then
+                        direction = (targetPart.Position - origin).Unit * 1000
+                        args[1] = Ray.new(origin, direction)
+                    end
+                    
+                    CreateTracer(origin, origin + (direction.Unit * 250))
+                    
+                    if isMagic then
                         return oldNamecall(self, unpack(args))
                     end
                 end
@@ -1138,17 +1213,19 @@ VisualTab:CreateToggle("顯示外框透視", false, function(state) Toggles.BoxE
 VisualTab:CreateToggle("顯示玩家名稱", false, function(state) Toggles.NameESP = state end)
 VisualTab:CreateToggle("顯示血量資訊", false, function(state) Toggles.HealthESP = state end)
 VisualTab:CreateToggle("顯示距離", false, function(state) Toggles.DistanceESP = state end)
+VisualTab:CreateToggle("強制第三人稱視角", false, function(state) Toggles.ThirdPerson = state end)
+VisualTab:CreateSlider("第三人稱距離", 5, 30, 10, function(val) Settings.ThirdPersonDist = val end)
 
 
 -- 角色分頁
 local CharacterTab = Window:CreateTab("角色")
 
-local originalWalkSpeed = 16
-CharacterTab:CreateSlider("移動速度 (WalkSpeed)", 16, 200, 16, function(val)
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-        LocalPlayer.Character.Humanoid.WalkSpeed = val
-    end
-end)
+CharacterTab:CreateToggle("啟用自訂移動 (鎖定速度與跳躍)", false, function(state) Toggles.CustomMovement = state end)
+CharacterTab:CreateSlider("移動速度 (WalkSpeed)", 16, 200, 16, function(val) Settings.WalkSpeed = val end)
+CharacterTab:CreateSlider("跳躍高度 (JumpPower)", 50, 300, 50, function(val) Settings.JumpPower = val end)
+
+CharacterTab:CreateToggle("自動旋轉 (SpinBot)", false, function(state) Toggles.SpinBot = state end)
+CharacterTab:CreateSlider("旋轉速度", 10, 100, 50, function(val) Settings.SpinSpeed = val end)
 
 local flying = false
 local flySpeed = 50
@@ -1189,6 +1266,28 @@ RunService.Stepped:Connect(function()
                 part.CanCollide = false
             end
         end
+    end
+end)
+
+local spinAngle = 0
+RunService.RenderStepped:Connect(function(deltaTime)
+    local char = LocalPlayer.Character
+    if not char then return end
+    
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChild("Humanoid")
+    
+    -- 自動旋轉 (SpinBot)
+    if Toggles.SpinBot and hrp then
+        spinAngle = spinAngle + (Settings.SpinSpeed * deltaTime)
+        hrp.CFrame = CFrame.new(hrp.Position) * CFrame.Angles(0, math.rad(spinAngle * 10), 0)
+    end
+    
+    -- 自訂移動 (強制鎖定速度與跳躍高度，防止遊戲覆蓋)
+    if Toggles.CustomMovement and hum then
+        hum.WalkSpeed = Settings.WalkSpeed
+        hum.UseJumpPower = true
+        hum.JumpPower = Settings.JumpPower
     end
 end)
 
