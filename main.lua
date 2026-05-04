@@ -1213,7 +1213,18 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
             if soundName:find("fire") or soundName:find("shoot") or soundName:find("shot") or soundName:find("gun") or soundName:find("bang") then
                 -- 確保只改自己的槍聲
                 if self:IsDescendantOf(Workspace.CurrentCamera) or (LocalPlayer.Character and self:IsDescendantOf(LocalPlayer.Character)) then
-                    self.SoundId = Settings.CustomGunSoundID
+                    -- 播放自己的獨立聲音，不要修改原始物件，避免觸發遊戲的反作弊或報錯
+                    task.spawn(function()
+                        local customSound = Instance.new("Sound")
+                        customSound.SoundId = Settings.CustomGunSoundID
+                        customSound.Volume = 2
+                        customSound.Parent = Workspace
+                        customSound:Play()
+                        task.wait(2)
+                        customSound:Destroy()
+                    end)
+                    -- 直接攔截原始聲音的播放
+                    return
                 end
             end
         end
