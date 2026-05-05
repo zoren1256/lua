@@ -39,7 +39,8 @@ local Toggles = {
     HideWeapon = false,
     CustomGunSound = true,
     TeamCheck = true,
-    RapidFire = false
+    RapidFire = false,
+    MuzzleTP = false
 }
 
 local Settings = {
@@ -1357,9 +1358,20 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
             local direction = args[2]
             if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
                 local targetPart = CachedMagicBulletTargetPart
-                local isMagic = Toggles.MagicBullet and targetPart
                 
-                if isMagic then
+                -- 槍口傳送 (Muzzle TP)：把子彈起點直接傳送到敵人身邊，零距離開槍
+                if Toggles.MuzzleTP and targetPart then
+                    local newOrigin = targetPart.Position + (origin - targetPart.Position).Unit * 3
+                    local newDirection = (targetPart.Position - newOrigin).Unit * 10
+                    args[1] = newOrigin
+                    args[2] = newDirection
+                    CreateTracer(origin, targetPart.Position)
+                    if setnamecallmethod then setnamecallmethod(method) end
+                    return oldNamecall(self, unpack(args, 1, argCount))
+                end
+                
+                -- 靜默追蹤 (Magic Bullet)：子彈從你的槍口射出，但方向轉向敵人
+                if Toggles.MagicBullet and targetPart then
                     direction = (targetPart.Position - origin).Unit * 1000
                     args[2] = direction
                     if setnamecallmethod then setnamecallmethod(method) end
@@ -1375,9 +1387,19 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
             local direction = args[1].Direction
             if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
                 local targetPart = CachedMagicBulletTargetPart
-                local isMagic = Toggles.MagicBullet and targetPart
                 
-                if isMagic then
+                -- 槍口傳送 (Legacy Ray API)
+                if Toggles.MuzzleTP and targetPart then
+                    local newOrigin = targetPart.Position + (origin - targetPart.Position).Unit * 3
+                    local newDirection = (targetPart.Position - newOrigin).Unit * 10
+                    args[1] = Ray.new(newOrigin, newDirection)
+                    CreateTracer(origin, targetPart.Position)
+                    if setnamecallmethod then setnamecallmethod(method) end
+                    return oldNamecall(self, unpack(args, 1, argCount))
+                end
+                
+                -- 靜默追蹤 (Legacy Ray API)
+                if Toggles.MagicBullet and targetPart then
                     direction = (targetPart.Position - origin).Unit * 1000
                     args[1] = Ray.new(origin, direction)
                     if setnamecallmethod then setnamecallmethod(method) end
@@ -1409,6 +1431,7 @@ CombatTab:CreateToggle("啟用自瞄 (右鍵觸發)", false, function(state) Tog
 CombatTab:CreateToggle("傳統自動開槍 (需對準敵人)", false, function(state) Toggles.TriggerBot = state end)
 CombatTab:CreateToggle("智能自動射擊 (配合靜默)", false, function(state) Toggles.SmartTrigger = state end)
 CombatTab:CreateToggle("啟用靜默追蹤", false, function(state) Toggles.MagicBullet = state end)
+CombatTab:CreateToggle("槍口傳送 (穿牆神器)", false, function(state) Toggles.MuzzleTP = state end)
 CombatTab:CreateToggle("過濾隊友 (Team Check)", true, function(state) Toggles.TeamCheck = state end)
 CombatTab:CreateToggle("限制鎖定範圍 (FOV)", true, function(state) Settings.AimbotUseFOV = state end)
 CombatTab:CreateToggle("啟用移動預判 (Prediction)", false, function(state) Settings.AimbotPrediction = state end)
