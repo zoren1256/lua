@@ -1213,7 +1213,7 @@ end)
 -- 極限隱藏武器系統 (Absolute Priority 覆蓋)
 RunService:BindToRenderStep("PONY_HideWeapon_Ultra", Enum.RenderPriority.Last.Value + 9000, function()
     if Toggles.HideWeapon then
-        -- 1. 隱藏 Camera 內的所有 ViewModel (排除我們的 Tracer)
+        -- 1. 隱藏 Camera 內的所有 ViewModel
         if Workspace.CurrentCamera then
             for _, obj in pairs(Workspace.CurrentCamera:GetDescendants()) do
                 if obj:IsA("BasePart") and obj.Name ~= "PONY_Tracer" then 
@@ -1224,26 +1224,8 @@ RunService:BindToRenderStep("PONY_HideWeapon_Ultra", Enum.RenderPriority.Last.Va
         -- 2. 隱藏玩家角色身上的 Tool
         if LocalPlayer.Character then
             for _, obj in pairs(LocalPlayer.Character:GetDescendants()) do
-                if obj:IsA("BasePart") and not obj.Name:lower():find("torso") and not obj.Name:lower():find("head") and not obj.Name:lower():find("leg") and not obj.Name:lower():find("arm") then
-                    if obj:FindFirstAncestorOfClass("Tool") then
-                        obj.LocalTransparencyModifier = 1
-                    end
-                end
-            end
-        end
-        -- 3. 安全掃描 Workspace 直屬的最上層模型 (限制大小避免卡頓)
-        for _, obj in pairs(Workspace:GetChildren()) do
-            if obj:IsA("Model") and obj ~= LocalPlayer.Character then
-                -- 如果這個模型是地圖或超大物件，直接跳過 (避免卡死)
-                if #obj:GetChildren() < 50 then
-                    local name = obj.Name:lower()
-                    if name:find("view") or name:find("arm") or name:find("weapon") or name:find("gun") or name:find("fp") or name:find("firstperson") then
-                        for _, p in pairs(obj:GetDescendants()) do
-                            if p:IsA("BasePart") and p.Name ~= "PONY_Tracer" then 
-                                p.LocalTransparencyModifier = 1 
-                            end
-                        end
-                    end
+                if obj:IsA("BasePart") and obj:FindFirstAncestorOfClass("Tool") then
+                    obj.LocalTransparencyModifier = 1
                 end
             end
         end
@@ -1271,32 +1253,37 @@ end)
 --------------------------------------------------------------------------------
 -- 靜默追蹤
 --------------------------------------------------------------------------------
--- 換膚邏輯 (極限改造：將槍枝替換為數位雜訊團)
+-- 換膚邏輯 (精準針對武器系統)
 local function ApplySkin(obj)
     if not obj then return end
     for _, part in pairs(obj:GetDescendants()) do
         if part:IsA("BasePart") then
-            -- 1. 隱藏原本的槍身零件 (使用 LocalTransparencyModifier 確保穩定)
+            -- 1. 隱藏原本的槍身零件
             part.LocalTransparencyModifier = 1
-            part.Transparency = 1 -- 雙重保險
+            part.Transparency = 1 
             
-            -- 2. 注入雜訊粒子 (不再限制名稱，只要是 BasePart 且夠大的就注入)
+            -- 2. 注入超強雜訊粒子
             if not part:FindFirstChild("PONY_GlitchCloud") then
                 local emitter = Instance.new("ParticleEmitter")
                 emitter.Name = "PONY_GlitchCloud"
                 emitter.Texture = "rbxassetid://451336109"
                 emitter.Color = ColorSequence.new(Color3.fromRGB(180, 50, 255))
                 emitter.Size = NumberSequence.new({
-                    NumberSequenceKeypoint.new(0, 0.5),
-                    NumberSequenceKeypoint.new(0.5, 1.2),
+                    NumberSequenceKeypoint.new(0, 1),
+                    NumberSequenceKeypoint.new(0.5, 2),
                     NumberSequenceKeypoint.new(1, 0)
                 })
-                emitter.Rate = 200 -- 每一個零件都加一點，集合起來就是一大團
-                emitter.Speed = NumberRange.new(0, 1)
-                emitter.Lifetime = NumberRange.new(0.1, 0.3)
-                emitter.Transparency = NumberSequence.new(0.3, 1)
-                emitter.SpreadAngle = Vector2.new(360, 360)
+                emitter.Rate = 500
+                emitter.Lifetime = NumberRange.new(0.2, 0.4)
+                emitter.Transparency = NumberSequence.new(0, 1)
+                emitter.Enabled = true
                 emitter.Parent = part
+                
+                local light = Instance.new("PointLight")
+                light.Color = Color3.fromRGB(180, 50, 255)
+                light.Range = 10
+                light.Brightness = 5
+                light.Parent = part
             end
         end
     end
@@ -1648,22 +1635,11 @@ RunService.Stepped:Connect(function()
         end
     end
     
-    -- 藏頭邏輯 (Anti-Headshot) - 提升到 RenderStepped 並修改 C0 確保強制覆蓋
+    -- 藏頭邏輯 (Anti-Headshot)
     if Toggles.AntiHeadshot then
-        local char = LocalPlayer.Character
-        if char then
-            local isR15 = char:FindFirstChild("UpperTorso") ~= nil
-            if isR15 then
-                local neck = char.UpperTorso:FindFirstChild("Neck")
-                if neck then
-                    neck.C0 = CFrame.new(0, -1, 0) * CFrame.Angles(math.rad(-160), 0, 0) -- 直接把脖子節點往下移並反轉
-                end
-            else
-                local neck = char:FindFirstChild("Torso") and char.Torso:FindFirstChild("Neck")
-                if neck then
-                    neck.C0 = CFrame.new(0, -1, 0) * CFrame.Angles(math.rad(-160), 0, 0)
-                end
-            end
+        local neck = char:FindFirstChild("Neck", true)
+        if neck then
+            neck.Transform = CFrame.Angles(math.rad(-180), 0, 0)
         end
     end
 end)
