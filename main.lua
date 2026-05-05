@@ -1212,18 +1212,30 @@ end)
 
 -- 隱藏武器與換膚系統 (Absolute Priority 覆蓋)
 local function ApplyGlitchEffect(part)
-    if not part:FindFirstChild("PONY_HoloSkin") then
-        local adornment = Instance.new("BoxHandleAdornment")
-        adornment.Name = "PONY_HoloSkin"
-        adornment.Adornee = part
-        adornment.Size = part.Size + Vector3.new(0.05, 0.05, 0.05) -- 稍微比原零件大一點點，完全包覆
-        adornment.Color3 = Color3.fromRGB(180, 50, 255) -- 螢光紫
-        adornment.Transparency = 0.4 -- 半透明全息質感
-        adornment.ZIndex = 10 -- 確保渲染在最外層
-        adornment.AlwaysOnTop = true -- 無視遮擋
-        adornment.Parent = part
+    -- 排除手部零件，讓雜訊只包覆在武器上
+    local name = part.Name:lower()
+    if name:find("arm") or name:find("hand") or name:find("sleeve") then return end
+
+    if not part:FindFirstChild("PONY_GlitchCloud") then
+        local emitter = Instance.new("ParticleEmitter")
+        emitter.Name = "PONY_GlitchCloud"
+        emitter.Texture = "rbxassetid://451336109" -- 數位雜訊貼圖
+        emitter.Color = ColorSequence.new(Color3.fromRGB(180, 50, 255))
+        emitter.Size = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.8),
+            NumberSequenceKeypoint.new(0.5, 1.5),
+            NumberSequenceKeypoint.new(1, 0)
+        })
+        emitter.Rate = 200 -- 密集度
+        emitter.Lifetime = NumberRange.new(0.1, 0.3)
+        emitter.Speed = NumberRange.new(0, 1)
+        emitter.Transparency = NumberSequence.new(0.2, 1)
+        emitter.LightEmission = 1 -- 自發光
+        emitter.ZOffset = 1
+        emitter.SpreadAngle = Vector2.new(360, 360)
+        emitter.Enabled = true
+        emitter.Parent = part
         
-        -- 保留發光效果
         local light = Instance.new("PointLight")
         light.Color = Color3.fromRGB(180, 50, 255)
         light.Range = 8
@@ -1249,6 +1261,21 @@ RunService:BindToRenderStep("PONY_HideWeapon_Ultra", Enum.RenderPriority.Last.Va
                 if obj:IsA("BasePart") and obj:FindFirstAncestorOfClass("Tool") then
                     obj.LocalTransparencyModifier = 1
                     if Toggles.SkinSwapper then ApplyGlitchEffect(obj) end
+                end
+            end
+        end
+        -- 3. 處理被放在 Workspace 裡的 ViewModel (排除所有玩家角色以防止報錯)
+        for _, obj in pairs(Workspace:GetChildren()) do
+            if obj:IsA("Model") and not Players:GetPlayerFromCharacter(obj) then
+                local name = obj.Name:lower()
+                -- 這些是常見的 ViewModel 關鍵字
+                if name:find("view") or name:find("arm") or name:find("weapon") or name:find("gun") or name:find("fp") or name:find("firstperson") then
+                    for _, p in pairs(obj:GetDescendants()) do
+                        if p:IsA("BasePart") and p.Name ~= "PONY_Tracer" and p.Name ~= "PONYSnowPart" then 
+                            p.LocalTransparencyModifier = 1 
+                            if Toggles.SkinSwapper then ApplyGlitchEffect(p) end
+                        end
+                    end
                 end
             end
         end
