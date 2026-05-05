@@ -1380,14 +1380,26 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
                 if direction.Magnitude > 100 or isProj then
                     local targetPart = CachedMagicBulletTargetPart
                     if Toggles.MagicBullet and targetPart then
-                        direction = (targetPart.Position - origin).Unit * math.max(direction.Magnitude, 1500)
+                        local dirUnit = (targetPart.Position - origin).Unit
+                        
+                        -- 【大腦升級】如果是弓箭 (isProj)，絕對不能把長度變成 1500！
+                        -- 否則伺服器的防作弊會判定「箭矢瞬間移動」而沒收傷害。
+                        -- 必須保留原來的短距離長度，讓箭矢保持原速，在空中自動轉彎變成「追蹤導彈」！
+                        if direction.Magnitude <= 100 then
+                            direction = dirUnit * direction.Magnitude
+                        else
+                            direction = dirUnit * math.max(direction.Magnitude, 1500)
+                        end
+                        
                         args[argDirIndex] = direction
-                        -- 在被修改的射線起點畫出軌跡 (如果是弓箭，這會在半空中折射)
-                        CreateTracer(origin, origin + (direction.Unit * 250))
+                        -- 畫出軌跡 (如果是弓箭，你會看到一條一條短線連成彎曲的追蹤軌跡)
+                        if direction.Magnitude > 100 then
+                            CreateTracer(origin, origin + (direction.Unit * 250))
+                        end
                         if setnamecallmethod then setnamecallmethod(method) end
                         return oldNamecall(self, unpack(args, 1, argCount))
                     end
-                    -- 如果沒鎖定敵人，只幫長距離子彈畫軌跡 (避免弓箭畫出密集的線)
+                    -- 沒開自瞄時，只幫長距離子彈畫軌跡
                     if direction.Magnitude > 100 then
                         CreateTracer(origin, origin + (direction.Unit * 250))
                     end
@@ -1415,9 +1427,18 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
                 if directionRay.Magnitude > 100 or isProj then
                     local targetPart = CachedMagicBulletTargetPart
                     if Toggles.MagicBullet and targetPart then
-                        directionRay = (targetPart.Position - originRay).Unit * math.max(directionRay.Magnitude, 1500)
+                        local dirUnit = (targetPart.Position - originRay).Unit
+                        
+                        if directionRay.Magnitude <= 100 then
+                            directionRay = dirUnit * directionRay.Magnitude
+                        else
+                            directionRay = dirUnit * math.max(directionRay.Magnitude, 1500)
+                        end
+                        
                         args[1] = Ray.new(originRay, directionRay)
-                        CreateTracer(originRay, originRay + (directionRay.Unit * 250))
+                        if directionRay.Magnitude > 100 then
+                            CreateTracer(originRay, originRay + (directionRay.Unit * 250))
+                        end
                         if setnamecallmethod then setnamecallmethod(method) end
                         return oldNamecall(self, unpack(args, 1, argCount))
                     end
