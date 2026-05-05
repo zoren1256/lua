@@ -38,7 +38,8 @@ local Toggles = {
     CustomMovement = false,
     SmartTrigger = false,
     HideWeapon = false,
-    CustomGunSound = true,
+    CustomGunSound = false,
+    SilentGun = true,
     TeamCheck = true
 }
 
@@ -1313,23 +1314,29 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
         end
         
         if typeof(soundObj) == "Instance" and soundObj.ClassName == "Sound" then
-            if Toggles.CustomGunSound then
-                local soundName = soundObj.Name:lower()
-                -- 排除腳步聲、換彈等非槍聲
-                local isIgnored = soundName:find("reload") or soundName:find("mag") or soundName:find("clip") or soundName:find("equip") or soundName:find("pull") or soundName:find("step") or soundName:find("walk") or soundName:find("run") or soundName:find("foot")
-                
-                if not isIgnored then
-                    local inCamera = Workspace.CurrentCamera and checkDescendant(soundObj, Workspace.CurrentCamera)
-                    local inTool = false
-                    if LocalPlayer.Character then
-                        local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
-                        if tool and checkDescendant(soundObj, tool) then
-                            inTool = true
-                        end
+            local soundName = soundObj.Name:lower()
+            -- 排除腳步聲、換彈等非槍聲
+            local isIgnored = soundName:find("reload") or soundName:find("mag") or soundName:find("clip") or soundName:find("equip") or soundName:find("pull") or soundName:find("step") or soundName:find("walk") or soundName:find("run") or soundName:find("foot")
+            
+            if not isIgnored then
+                local inCamera = Workspace.CurrentCamera and checkDescendant(soundObj, Workspace.CurrentCamera)
+                local inTool = false
+                if LocalPlayer.Character then
+                    local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
+                    if tool and checkDescendant(soundObj, tool) then
+                        inTool = true
                     end
-                    
-                    -- 如果聲音在武器裡、或者剛好玩家正在開槍 (IsShooting) 且聲音沒有被排除
-                    if inCamera or inTool or IsShooting then
+                end
+                
+                -- 如果聲音在武器裡、或者剛好玩家正在開槍 (IsShooting)
+                if inCamera or inTool or IsShooting then
+                    -- 【修正】完全靜音優先執行，不論 CustomGunSound 是否開啟
+                    if Toggles.SilentGun then
+                        if setnamecallmethod then setnamecallmethod(method) end
+                        return
+                    end
+
+                    if Toggles.CustomGunSound then
                         task.spawn(function()
                             local customSound = Instance.new("Sound")
                             customSound.SoundId = Settings.CustomGunSoundID
