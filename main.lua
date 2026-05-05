@@ -1210,22 +1210,51 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- 極限隱藏武器系統 (Absolute Priority 覆蓋)
+-- 隱藏武器與換膚系統 (Absolute Priority 覆蓋)
+local function ApplyGlitchEffect(part)
+    if not part:FindFirstChild("PONY_GlitchCloud") then
+        local emitter = Instance.new("ParticleEmitter")
+        emitter.Name = "PONY_GlitchCloud"
+        emitter.Texture = "rbxassetid://451336109"
+        emitter.Color = ColorSequence.new(Color3.fromRGB(180, 50, 255))
+        emitter.Size = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 1.5),
+            NumberSequenceKeypoint.new(0.5, 3),
+            NumberSequenceKeypoint.new(1, 0)
+        })
+        emitter.Rate = 500
+        emitter.Lifetime = NumberRange.new(0.1, 0.3)
+        emitter.Transparency = NumberSequence.new(0, 1)
+        emitter.LightEmission = 1
+        emitter.ZOffset = 1
+        emitter.Enabled = true
+        emitter.Parent = part
+        
+        local light = Instance.new("PointLight")
+        light.Color = Color3.fromRGB(180, 50, 255)
+        light.Range = 15
+        light.Brightness = 8
+        light.Parent = part
+    end
+end
+
 RunService:BindToRenderStep("PONY_HideWeapon_Ultra", Enum.RenderPriority.Last.Value + 9000, function()
-    if Toggles.HideWeapon then
-        -- 1. 隱藏 Camera 內的所有 ViewModel
+    if Toggles.HideWeapon or Toggles.SkinSwapper then
+        -- 1. 處理 Camera 內的所有 ViewModel
         if Workspace.CurrentCamera then
             for _, obj in pairs(Workspace.CurrentCamera:GetDescendants()) do
-                if obj:IsA("BasePart") and obj.Name ~= "PONY_Tracer" then 
+                if obj:IsA("BasePart") and obj.Name ~= "PONY_Tracer" and obj.Name ~= "PONYSnowPart" then 
                     obj.LocalTransparencyModifier = 1 
+                    if Toggles.SkinSwapper then ApplyGlitchEffect(obj) end
                 end
             end
         end
-        -- 2. 隱藏玩家角色身上的 Tool
+        -- 2. 處理玩家角色身上的 Tool
         if LocalPlayer.Character then
             for _, obj in pairs(LocalPlayer.Character:GetDescendants()) do
                 if obj:IsA("BasePart") and obj:FindFirstAncestorOfClass("Tool") then
                     obj.LocalTransparencyModifier = 1
+                    if Toggles.SkinSwapper then ApplyGlitchEffect(obj) end
                 end
             end
         end
@@ -1253,63 +1282,6 @@ end)
 --------------------------------------------------------------------------------
 -- 靜默追蹤
 --------------------------------------------------------------------------------
--- 換膚邏輯 (精準針對武器系統)
-local function ApplySkin(obj)
-    if not obj then return end
-    for _, part in pairs(obj:GetDescendants()) do
-        if part:IsA("BasePart") then
-            -- 1. 隱藏原本的槍身零件
-            part.LocalTransparencyModifier = 1
-            part.Transparency = 1 
-            
-            -- 2. 注入超強雜訊粒子
-            if not part:FindFirstChild("PONY_GlitchCloud") then
-                local emitter = Instance.new("ParticleEmitter")
-                emitter.Name = "PONY_GlitchCloud"
-                emitter.Texture = "rbxassetid://451336109"
-                emitter.Color = ColorSequence.new(Color3.fromRGB(180, 50, 255))
-                emitter.Size = NumberSequence.new({
-                    NumberSequenceKeypoint.new(0, 1),
-                    NumberSequenceKeypoint.new(0.5, 2),
-                    NumberSequenceKeypoint.new(1, 0)
-                })
-                emitter.Rate = 500
-                emitter.Lifetime = NumberRange.new(0.2, 0.4)
-                emitter.Transparency = NumberSequence.new(0, 1)
-                emitter.Enabled = true
-                emitter.Parent = part
-                
-                local light = Instance.new("PointLight")
-                light.Color = Color3.fromRGB(180, 50, 255)
-                light.Range = 10
-                light.Brightness = 5
-                light.Parent = part
-            end
-        end
-    end
-end
-
-RunService.RenderStepped:Connect(function()
-    if Toggles.SkinSwapper then
-        -- 1. 替換第一人稱手部武器 (ViewModel)
-        if Workspace.CurrentCamera then
-            for _, obj in pairs(Workspace.CurrentCamera:GetChildren()) do
-                if obj:IsA("Model") or obj:IsA("Part") then
-                    local name = obj.Name:lower()
-                    if name:find("view") or name:find("arm") or name:find("weapon") or name:find("gun") then
-                        ApplySkin(obj)
-                    end
-                end
-            end
-        end
-        -- 2. 替換角色身上的武器
-        if LocalPlayer.Character then
-            local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
-            if tool then ApplySkin(tool) end
-        end
-    end
-end)
-
 local function CreateTracer(origin, endPoint)
     task.spawn(function()
         local distance = (endPoint - origin).Magnitude
@@ -1601,10 +1573,10 @@ CharacterTab:CreateToggle("懸浮打坐 (Hover Meditate)", false, function(state
 end)
 
 RunService.Stepped:Connect(function()
+    local char = LocalPlayer.Character
+    if not char then return end
+
     if HoverMeditating then
-        local char = LocalPlayer.Character
-        if not char then return end
-        
         local hum = char:FindFirstChild("Humanoid")
         if hum then
             hum.HipHeight = 5 -- 強制懸空 5 Studs
