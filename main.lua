@@ -1200,8 +1200,6 @@ end
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
     local method = getnamecallmethod()
-    local argCount = select("#", ...)
-    local args = {...}
 
     -- 自訂檢查父節點函數，避免使用 :IsDescendantOf 污染 namecall method
     local function checkDescendant(obj, target)
@@ -1231,10 +1229,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
                     end
                 end
                 
-                -- 如果是武器聲音，或者是明確的開槍聲音
-                local isGunName = soundName:find("fire") or soundName:find("shoot") or soundName:find("shot") or soundName:find("gun") or soundName:find("bang")
-                
-                if (inCamera or inTool or isGunName) then
+                if inCamera or inTool then
                     -- 播放自己的獨立聲音
                     task.spawn(function()
                         local customSound = Instance.new("Sound")
@@ -1254,6 +1249,8 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
 
     if IsShooting and not checkcaller() then
         if self == Workspace and method == "Raycast" then
+            local argCount = select("#", ...)
+            local args = {...}
             local origin = args[1]
             local direction = args[2]
             if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
@@ -1263,15 +1260,14 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
                 if isMagic then
                     direction = (targetPart.Position - origin).Unit * 1000
                     args[2] = direction
+                    return oldNamecall(self, unpack(args, 1, argCount))
                 end
                 
                 CreateTracer(origin, origin + (direction.Unit * 250))
-                
-                if isMagic then
-                    return oldNamecall(self, unpack(args, 1, argCount))
-                end
             end
         elseif self == Workspace and (method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay") then
+            local argCount = select("#", ...)
+            local args = {...}
             local origin = args[1].Origin
             local direction = args[1].Direction
             if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
@@ -1281,18 +1277,15 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
                 if isMagic then
                     direction = (targetPart.Position - origin).Unit * 1000
                     args[1] = Ray.new(origin, direction)
+                    return oldNamecall(self, unpack(args, 1, argCount))
                 end
                 
                 CreateTracer(origin, origin + (direction.Unit * 250))
-                
-                if isMagic then
-                    return oldNamecall(self, unpack(args, 1, argCount))
-                end
             end
         end
     end
 
-    return oldNamecall(self, unpack(args, 1, argCount))
+    return oldNamecall(self, ...)
 end))
 
 --------------------------------------------------------------------------------
