@@ -32,6 +32,7 @@ local Toggles = {
     InfiniteAmmo = false,
     AutoHeal = false,
     TriggerBot = false,
+    DoubleTap = false,
     ThirdPerson = false,
     SpinBot = false,
     CustomMovement = false,
@@ -1185,8 +1186,23 @@ RunService.RenderStepped:Connect(function()
         end
 
         if shouldShoot then
-            mouse1press()
-            task.delay(0.05, function() mouse1release() end)
+            task.spawn(function()
+                -- 第一發
+                mouse1press()
+                task.wait(0.03)
+                mouse1release()
+                
+                -- 如果開啟二連發，在極短延遲後補上第二發
+                if Toggles.DoubleTap then
+                    task.wait(0.02) 
+                    mouse1press()
+                    task.wait(0.03)
+                    mouse1release()
+                end
+            end)
+            
+            -- 加入一個短暫的冷卻，避免每幀都觸發導致遊戲崩潰
+            task.wait(0.1) 
         end
     end
 end)
@@ -1401,6 +1417,7 @@ CombatTab:CreateToggle("顯示鎖定範圍", false, function(state) Toggles.Show
 CombatTab:CreateSlider("鎖定範圍大小", 10, 500, 100, function(val) Settings.AimbotFOV = val end)
 CombatTab:CreateSlider("自瞄平滑度 (越大越慢)", 1, 20, 1, function(val) Settings.AimbotSmoothness = val end)
 CombatTab:CreateDropdown("自瞄部位", {"Auto (AI)", "Head", "HumanoidRootPart"}, "Auto (AI)", function(val) Settings.AimbotTarget = val end)
+CombatTab:CreateToggle("二連發模式 (Double Tap)", false, function(state) Toggles.DoubleTap = state end)
 
 CombatTab:CreateToggle("啟用判定區擴大", false, function(state) Toggles.HitboxExpander = state end)
 CombatTab:CreateSlider("判定區大小", 2, 20, 5, function(val) Settings.HitboxSize = val end)
