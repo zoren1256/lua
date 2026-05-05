@@ -1,5 +1,5 @@
 --[[
-    Pony - Rivals 專屬版本
+    PONY - Rivals 專屬版本
     語言：繁體中文
 ]]
 
@@ -66,7 +66,7 @@ local Settings = {
 --------------------------------------------------------------------------------
 local function CreateSnow()
     local snowPart = Instance.new("Part")
-    snowPart.Name = "PonySnowPart"
+    snowPart.Name = "PONYSnowPart"
     snowPart.Size = Vector3.new(300, 1, 300)
     snowPart.Transparency = 1
     snowPart.Anchored = true
@@ -99,10 +99,10 @@ local function CreateSnow()
     
 
     -- 建立一個純黑無星空的 Skybox 覆蓋遊戲原本的天空
-    local customSky = Lighting:FindFirstChild("PonySky")
+    local customSky = Lighting:FindFirstChild("PONYSky")
     if not customSky then
         customSky = Instance.new("Sky")
-        customSky.Name = "PonySky"
+        customSky.Name = "PONYSky"
         customSky.SkyboxBk = ""
         customSky.SkyboxDn = ""
         customSky.SkyboxFt = ""
@@ -117,19 +117,19 @@ local function CreateSnow()
     -- 強制移除遊戲本身其他的 Skybox，確保我們的純黑天空生效
     local function removeOtherSkies()
         for _, v in pairs(Lighting:GetChildren()) do
-            if v:IsA("Sky") and v.Name ~= "PonySky" then v:Destroy() end
+            if v:IsA("Sky") and v.Name ~= "PONYSky" then v:Destroy() end
         end
     end
     removeOtherSkies()
     Lighting.ChildAdded:Connect(function(v)
-        if v:IsA("Sky") and v.Name ~= "PonySky" then task.wait() v:Destroy() end
+        if v:IsA("Sky") and v.Name ~= "PONYSky" then task.wait() v:Destroy() end
     end)
     
     -- 加入冷色調濾鏡 (保留雪天的冷峻氛圍)
-    local colorCorrection = Lighting:FindFirstChild("PonyColorCorrection")
+    local colorCorrection = Lighting:FindFirstChild("PONYColorCorrection")
     if not colorCorrection then
         colorCorrection = Instance.new("ColorCorrectionEffect")
-        colorCorrection.Name = "PonyColorCorrection"
+        colorCorrection.Name = "PONYColorCorrection"
         colorCorrection.Parent = Lighting
     end
     
@@ -287,7 +287,7 @@ function Library:CreateWindow(config)
     local WindowSize = config.Size or UDim2.new(0, 600, 0, 400)
 
     local PONY_GUI = Instance.new("ScreenGui")
-    PONY_GUI.Name = "Pony_Rivals"
+    PONY_GUI.Name = "PONY_Rivals"
     PONY_GUI.ResetOnSpawn = false
     PONY_GUI.IgnoreGuiInset = true
     
@@ -1210,12 +1210,12 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- 極限隱藏武器系統 (Absolute Priority 覆蓋)
-RunService:BindToRenderStep("Pony_HideWeapon_Ultra", Enum.RenderPriority.Last.Value + 9000, function()
+RunService:BindToRenderStep("PONY_HideWeapon_Ultra", Enum.RenderPriority.Last.Value + 9000, function()
     if Toggles.HideWeapon then
         -- 1. 隱藏 Camera 內的所有 ViewModel (排除我們的 Tracer)
         if Workspace.CurrentCamera then
             for _, obj in pairs(Workspace.CurrentCamera:GetDescendants()) do
-                if obj:IsA("BasePart") and obj.Name ~= "Pony_Tracer" then 
+                if obj:IsA("BasePart") and obj.Name ~= "PONY_Tracer" then 
                     obj.LocalTransparencyModifier = 1 
                 end
             end
@@ -1238,7 +1238,7 @@ RunService:BindToRenderStep("Pony_HideWeapon_Ultra", Enum.RenderPriority.Last.Va
                     local name = obj.Name:lower()
                     if name:find("view") or name:find("arm") or name:find("weapon") or name:find("gun") or name:find("fp") or name:find("firstperson") then
                         for _, p in pairs(obj:GetDescendants()) do
-                            if p:IsA("BasePart") and p.Name ~= "Pony_Tracer" then 
+                            if p:IsA("BasePart") and p.Name ~= "PONY_Tracer" then 
                                 p.LocalTransparencyModifier = 1 
                             end
                         end
@@ -1250,7 +1250,7 @@ RunService:BindToRenderStep("Pony_HideWeapon_Ultra", Enum.RenderPriority.Last.Va
 end)
 
 -- 第三人稱視角 (Third Person) 強制覆蓋遊戲相機腳本
-RunService:BindToRenderStep("Pony_ThirdPerson", Enum.RenderPriority.Camera.Value + 10, function()
+RunService:BindToRenderStep("PONY_ThirdPerson", Enum.RenderPriority.Camera.Value + 10, function()
     if Toggles.ThirdPerson and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head") then
         local Camera = Workspace.CurrentCamera
         if Camera then
@@ -1280,9 +1280,9 @@ local function ApplySkin(obj)
             
             -- 2. 在零件中心注入雜訊粒子 (只在主體零件注入，避免粒子過多卡頓)
             local name = part.Name:lower()
-            if not part:FindFirstChild("Pony_GlitchCloud") and (name:find("handle") or name:find("body") or name:find("barrel") or name:find("gun")) then
+            if not part:FindFirstChild("PONY_GlitchCloud") and (name:find("handle") or name:find("body") or name:find("barrel") or name:find("gun")) then
                 local emitter = Instance.new("ParticleEmitter")
-                emitter.Name = "Pony_GlitchCloud"
+                emitter.Name = "PONY_GlitchCloud"
                 emitter.Texture = "rbxassetid://451336109" -- 數位雜訊貼圖
                 emitter.Color = ColorSequence.new(Color3.fromRGB(180, 50, 255)) -- 霓虹紫
                 emitter.Size = NumberSequence.new({
@@ -1334,7 +1334,7 @@ local function CreateTracer(origin, endPoint)
     task.spawn(function()
         local distance = (endPoint - origin).Magnitude
         local tracer = Instance.new("Part")
-        tracer.Name = "Pony_Tracer"
+        tracer.Name = "PONY_Tracer"
         tracer.Anchored = true
         tracer.CanCollide = false
         tracer.Transparency = 0.2
@@ -1681,7 +1681,7 @@ end)
 local MiscTab = Window:CreateTab("雜項")
 
 MiscTab:CreateButton("強制關閉腳本", function()
-    local gui = CoreGui:FindFirstChild("Pony_Rivals") or LocalPlayer:WaitForChild("PlayerGui"):FindFirstChild("Pony_Rivals")
+    local gui = CoreGui:FindFirstChild("PONY_Rivals") or LocalPlayer:WaitForChild("PlayerGui"):FindFirstChild("PONY_Rivals")
     if gui then gui:Destroy() end
     if FOVCircle then FOVCircle:Remove() end
 end)
@@ -1696,7 +1696,7 @@ task.spawn(function()
     task.wait(3.5) -- 等待動畫播完再發送通知
     pcall(function()
         game.StarterGui:SetCore("SendNotification", {
-            Title = "Pony",
+            Title = "PONY",
             Text = "Rivals 版本載入成功！按 RightControl 隱藏介面。",
             Duration = 5,
         })
