@@ -1086,7 +1086,14 @@ UserInputService.InputBegan:Connect(function(input, gpe)
 end)
 UserInputService.InputEnded:Connect(function(input, gpe)
     if input.UserInputType == Enum.UserInputType.MouseButton2 then AimbotHolding = false end
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then IsShooting = false end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then 
+        -- 延遲關閉開火狀態，讓弓箭等「放開才射出」的飛行物能套用靜默追蹤
+        task.delay(1, function()
+            if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+                IsShooting = false 
+            end
+        end)
+    end
 end)
 
 local CachedMagicBulletTargetPart = nil
@@ -1190,37 +1197,37 @@ RunService.RenderStepped:Connect(function()
         end
     end
     
-    -- 隱藏武器 (回歸最穩定的 RenderStepped 迴圈)
+    end
+end)
+
+-- 極限隱藏武器系統 (Absolute Priority 覆蓋)
+RunService:BindToRenderStep("ZRN_HideWeapon_Ultra", Enum.RenderPriority.Last.Value + 9000, function()
     if Toggles.HideWeapon then
-        wasWeaponHidden = true
-        local Camera = Workspace.CurrentCamera
-        if Camera then
-            for _, obj in pairs(Camera:GetDescendants()) do
-                if obj:IsA("BasePart") then obj.LocalTransparencyModifier = 1 end
+        -- 1. 隱藏 Camera 內的所有 ViewModel (排除我們的 Tracer)
+        if Workspace.CurrentCamera then
+            for _, obj in pairs(Workspace.CurrentCamera:GetDescendants()) do
+                if obj:IsA("BasePart") and obj.Name ~= "ZRN_Tracer" then 
+                    obj.LocalTransparencyModifier = 1 
+                end
             end
         end
+        -- 2. 隱藏玩家角色身上的 Tool
         if LocalPlayer.Character then
-            for _, tool in pairs(LocalPlayer.Character:GetChildren()) do
-                if tool:IsA("Tool") then
-                    for _, part in pairs(tool:GetDescendants()) do
-                        if part:IsA("BasePart") then part.LocalTransparencyModifier = 1 end
+            for _, obj in pairs(LocalPlayer.Character:GetDescendants()) do
+                if obj:IsA("BasePart") and not obj.Name:lower():find("torso") and not obj.Name:lower():find("head") and not obj.Name:lower():find("leg") and not obj.Name:lower():find("arm") then
+                    if obj:FindFirstAncestorOfClass("Tool") then
+                        obj.LocalTransparencyModifier = 1
                     end
                 end
             end
         end
-    elseif wasWeaponHidden then
-        wasWeaponHidden = false
-        local Camera = Workspace.CurrentCamera
-        if Camera then
-            for _, obj in pairs(Camera:GetDescendants()) do
-                if obj:IsA("BasePart") then obj.LocalTransparencyModifier = 0 end
-            end
-        end
-        if LocalPlayer.Character then
-            for _, tool in pairs(LocalPlayer.Character:GetChildren()) do
-                if tool:IsA("Tool") then
-                    for _, part in pairs(tool:GetDescendants()) do
-                        if part:IsA("BasePart") then part.LocalTransparencyModifier = 0 end
+        -- 3. 掃描 Workspace 直屬的最上層模型
+        for _, obj in pairs(Workspace:GetChildren()) do
+            if obj:IsA("Model") and obj ~= LocalPlayer.Character then
+                local name = obj.Name:lower()
+                if name:find("view") or name:find("arm") or name:find("weapon") or name:find("gun") or name:find("fp") or name:find("firstperson") or name:find("client") then
+                    for _, p in pairs(obj:GetDescendants()) do
+                        if p:IsA("BasePart") and p.Name ~= "ZRN_Tracer" then p.LocalTransparencyModifier = 1 end
                     end
                 end
             end
@@ -1335,36 +1342,43 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
             local args = {...}
             local origin = args[1]
             local direction = args[2]
-            if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
+            -- 放寬長度限制以涵蓋弓箭的短程拋物線射線 (排除小於 10 的腳步或相機檢測)
+            if typeof(direction) == "Vector3" and direction.Magnitude > 10 then
                 local targetPart = CachedMagicBulletTargetPart
                 local isMagic = Toggles.MagicBullet and targetPart
                 
                 if isMagic then
-                    direction = (targetPart.Position - origin).Unit * 1000
+                    -- 保持原本射線長度，避免破壞飛行物的計算，但強制轉向敵人
+                    direction = (targetPart.Position - origin).Unit * math.max(direction.Magnitude, 1000)
                     args[2] = direction
                     if setnamecallmethod then setnamecallmethod(method) end
                     return oldNamecall(self, unpack(args, 1, argCount))
                 end
                 
-                CreateTracer(origin, origin + (direction.Unit * 250))
+                -- Tracer 畫線 (只在射擊起點畫，避免畫出密集的拋物線短線)
+                if direction.Magnitude > 100 then
+                    CreateTracer(origin, origin + (direction.Unit * 250))
+                end
             end
         elseif self == Workspace and (method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay") then
             local argCount = select("#", ...)
             local args = {...}
             local origin = args[1].Origin
             local direction = args[1].Direction
-            if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
+            if typeof(direction) == "Vector3" and direction.Magnitude > 10 then
                 local targetPart = CachedMagicBulletTargetPart
                 local isMagic = Toggles.MagicBullet and targetPart
                 
                 if isMagic then
-                    direction = (targetPart.Position - origin).Unit * 1000
+                    direction = (targetPart.Position - origin).Unit * math.max(direction.Magnitude, 1000)
                     args[1] = Ray.new(origin, direction)
                     if setnamecallmethod then setnamecallmethod(method) end
                     return oldNamecall(self, unpack(args, 1, argCount))
                 end
                 
-                CreateTracer(origin, origin + (direction.Unit * 250))
+                if direction.Magnitude > 100 then
+                    CreateTracer(origin, origin + (direction.Unit * 250))
+                end
             end
         end
     end
