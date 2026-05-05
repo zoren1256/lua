@@ -1092,6 +1092,7 @@ end)
 
 local CachedMagicBulletTargetPart = nil
 local wasWeaponHidden = false
+local lastTriggerShot = 0
 
 RunService.RenderStepped:Connect(function()
 
@@ -1185,24 +1186,22 @@ RunService.RenderStepped:Connect(function()
             end
         end
 
-        if shouldShoot then
+        if shouldShoot and tick() - lastTriggerShot > 0.15 then
+            lastTriggerShot = tick()
             task.spawn(function()
                 -- 第一發
                 mouse1press()
-                task.wait(0.03)
+                task.wait(0.05)
                 mouse1release()
                 
-                -- 如果開啟二連發，在極短延遲後補上第二發
+                -- 如果開啟二連發，延遲稍微拉長一點點，避免被伺服器擋掉傷害
                 if Toggles.DoubleTap then
-                    task.wait(0.02) 
+                    task.wait(0.08) 
                     mouse1press()
-                    task.wait(0.03)
+                    task.wait(0.05)
                     mouse1release()
                 end
             end)
-            
-            -- 加入一個短暫的冷卻，避免每幀都觸發導致遊戲崩潰
-            task.wait(0.1) 
         end
     end
 end)
