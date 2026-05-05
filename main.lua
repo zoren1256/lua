@@ -1068,11 +1068,15 @@ Players.PlayerAdded:Connect(createESP)
 -- 核心渲染迴圈 (Aimbot & FOV)
 local AimbotHolding = false
 local IsShooting = false
+local PhysicalMouseDown = false -- 用來區分玩家真實按鍵與腳本模擬按鍵
 
 UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
     if input.UserInputType == Enum.UserInputType.MouseButton2 then AimbotHolding = true end
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then IsShooting = true end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then 
+        IsShooting = true 
+        PhysicalMouseDown = true
+    end
     
     -- 瞬移攻擊 (Teleport to Target)
     if input.KeyCode == Enum.KeyCode.T then
@@ -1089,18 +1093,23 @@ UserInputService.InputBegan:Connect(function(input, gpe)
 end)
 UserInputService.InputEnded:Connect(function(input, gpe)
     if input.UserInputType == Enum.UserInputType.MouseButton2 then AimbotHolding = false end
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then IsShooting = false end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then 
+        IsShooting = false 
+        PhysicalMouseDown = false
+    end
 end)
 
 -- 子彈射速調整 (Rapid Fire)
 -- 原理：玩家按住左鍵時，外掛在背景高速「放開→重新按下」來模擬連點
 task.spawn(function()
     while true do
-        if Toggles.RapidFire and IsShooting then
+        -- 使用 UserInputService 直接檢查物理按鍵狀態，避免被腳本模擬的放開/按下干擾
+        local isActuallyDown = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+        if Toggles.RapidFire and isActuallyDown then
             mouse1release()
             task.wait(0.001)
             mouse1press()
-            task.wait(Settings.FireRateDelay)
+            task.wait(math.max(Settings.FireRateDelay, 0.05)) -- 限制最低 0.05s (每秒 20 發)，防止被 Rivals 防火牆擋下
         else
             task.wait(0.1)
         end
@@ -1309,6 +1318,32 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
         return false
     end
 
+    return oldNamecall(self, ...)
+end))
+
+-- 槍口位置欺騙 (Muzzle Spoofing) - 真正的穿牆原理
+local oldIndex
+oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, prop)
+    if not checkcaller() and Toggles.MuzzleTP then
+        if prop == "WorldPosition" or prop == "Position" then
+            local name = self.Name:lower()
+            if name:find("muzzle") or name:find("tip") or name:find("barrel") or name:find("fire") then
+                local targetPart = CachedMagicBulletTargetPart
+                if targetPart then
+                    -- 騙過遊戲腳本，讓它以為槍口就在敵人前面 3 studs 的空中
+                    -- 這樣發射出的射線起點就會直接跳過牆壁
+                    return targetPart.Position + (Camera.CFrame.Position - targetPart.Position).Unit * 3
+                end
+            end
+        end
+    end
+    return oldIndex(self, prop)
+end))
+
+local oldNamecallInternal
+oldNamecallInternal = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+
     if (method == "Play" or method == "PlayLocalSound") and not checkcaller() then
         local soundObj = self
         if method == "PlayLocalSound" then
@@ -1359,15 +1394,25 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
             if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
                 local targetPart = CachedMagicBulletTargetPart
                 
-                -- 槍口傳送 (Muzzle TP)：把子彈起點直接傳送到敵人身邊，零距離開槍
+                -- 槍口傳送 (Muzzle TP)：讓子彈無視牆壁，直接穿透擊中敵人
+                -- 除了替換 Params，我們還要確保方向正確
                 if Toggles.MuzzleTP and targetPart then
-                    local newOrigin = targetPart.Position + (origin - targetPart.Position).Unit * 3
-                    local newDirection = (targetPart.Position - newOrigin).Unit * 10
-                    args[1] = newOrigin
+                    local wallIgnoreParams = RaycastParams.new()
+                    wallIgnoreParams.FilterType = Enum.RaycastFilterType.Include
+                    local charList = {}
+                    for _, p in pairs(Players:GetPlayers()) do
+                        if p ~= LocalPlayer and p.Character then
+                            table.insert(charList, p.Character)
+                        end
+                    end
+                    wallIgnoreParams.FilterDescendantsInstances = charList
+                    
+                    local newDirection = (targetPart.Position - origin).Unit * 1000
                     args[2] = newDirection
+                    args[3] = wallIgnoreParams
                     CreateTracer(origin, targetPart.Position)
                     if setnamecallmethod then setnamecallmethod(method) end
-                    return oldNamecall(self, unpack(args, 1, argCount))
+                    return oldNamecallInternal(self, unpack(args, 1, math.max(argCount, 3)))
                 end
                 
                 -- 靜默追蹤 (Magic Bullet)：子彈從你的槍口射出，但方向轉向敵人
@@ -1388,11 +1433,21 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
             if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
                 local targetPart = CachedMagicBulletTargetPart
                 
-                -- 槍口傳送 (Legacy Ray API)
+                -- 槍口傳送 (Legacy Ray API) - 改用 IgnoreList 方式穿牆
                 if Toggles.MuzzleTP and targetPart then
-                    local newOrigin = targetPart.Position + (origin - targetPart.Position).Unit * 3
-                    local newDirection = (targetPart.Position - newOrigin).Unit * 10
-                    args[1] = Ray.new(newOrigin, newDirection)
+                    local newDirection = (targetPart.Position - origin).Unit * 1000
+                    args[1] = Ray.new(origin, newDirection)
+                    -- 把所有非角色的物件加入忽略清單
+                    if method == "FindPartOnRayWithIgnoreList" then
+                        local ignoreList = args[2] or {}
+                        for _, obj in pairs(Workspace:GetChildren()) do
+                            if obj:IsA("BasePart") or (obj:IsA("Model") and not Players:GetPlayerFromCharacter(obj)) then
+                                table.insert(ignoreList, obj)
+                            end
+                        end
+                        table.insert(ignoreList, Workspace.Terrain)
+                        args[2] = ignoreList
+                    end
                     CreateTracer(origin, targetPart.Position)
                     if setnamecallmethod then setnamecallmethod(method) end
                     return oldNamecall(self, unpack(args, 1, argCount))
@@ -1431,7 +1486,7 @@ CombatTab:CreateToggle("啟用自瞄 (右鍵觸發)", false, function(state) Tog
 CombatTab:CreateToggle("傳統自動開槍 (需對準敵人)", false, function(state) Toggles.TriggerBot = state end)
 CombatTab:CreateToggle("智能自動射擊 (配合靜默)", false, function(state) Toggles.SmartTrigger = state end)
 CombatTab:CreateToggle("啟用靜默追蹤", false, function(state) Toggles.MagicBullet = state end)
-CombatTab:CreateToggle("槍口傳送 (穿牆神器)", false, function(state) Toggles.MuzzleTP = state end)
+CombatTab:CreateToggle("子彈穿牆", false, function(state) Toggles.MuzzleTP = state end)
 CombatTab:CreateToggle("過濾隊友 (Team Check)", true, function(state) Toggles.TeamCheck = state end)
 CombatTab:CreateToggle("限制鎖定範圍 (FOV)", true, function(state) Settings.AimbotUseFOV = state end)
 CombatTab:CreateToggle("啟用移動預判 (Prediction)", false, function(state) Settings.AimbotPrediction = state end)
