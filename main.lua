@@ -1086,14 +1086,7 @@ UserInputService.InputBegan:Connect(function(input, gpe)
 end)
 UserInputService.InputEnded:Connect(function(input, gpe)
     if input.UserInputType == Enum.UserInputType.MouseButton2 then AimbotHolding = false end
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then 
-        -- 延遲關閉開火狀態，讓弓箭等「放開才射出」的飛行物能套用靜默追蹤
-        task.delay(1, function()
-            if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
-                IsShooting = false 
-            end
-        end)
-    end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then IsShooting = false end
 end)
 
 local CachedMagicBulletTargetPart = nil
@@ -1340,121 +1333,41 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
     end
 
     if IsShooting and not checkcaller() then
-        if self == Workspace then
+        if self == Workspace and method == "Raycast" then
             local argCount = select("#", ...)
             local args = {...}
-            
-            local origin, direction, argDirIndex
-            local isRaycast = false
-            
-            if method == "Raycast" then
-                origin = args[1]
-                direction = args[2]
-                argDirIndex = 2
-                isRaycast = true
-            elseif method == "Spherecast" or method == "Blockcast" then
-                origin = (method == "Blockcast") and args[1].Position or args[1]
-                direction = args[3]
-                argDirIndex = 3
-                isRaycast = true
-            end
-            
-            if isRaycast and origin and direction and typeof(direction) == "Vector3" then
-                -- 判斷是否為拋物線飛行物 (如果射線起點離自己超過 5 單位，代表是飛出去的箭矢)
-                local isProj = false
-                if direction.Magnitude <= 100 then
-                    local char = LocalPlayer.Character
-                    if char then
-                        local hrp = char:FindFirstChild("HumanoidRootPart")
-                        local head = char:FindFirstChild("Head")
-                        local camPos = Workspace.CurrentCamera and Workspace.CurrentCamera.CFrame.Position
-                        local d1 = hrp and (origin - hrp.Position).Magnitude or 100
-                        local d2 = head and (origin - head.Position).Magnitude or 100
-                        local d3 = camPos and (origin - camPos).Magnitude or 100
-                        if d1 > 5 and d2 > 5 and d3 > 5 then
-                            isProj = true
-                        end
-                    end
-                end
-
-                if direction.Magnitude > 100 or isProj then
-                    local targetPart = CachedMagicBulletTargetPart
-                    if Toggles.MagicBullet and targetPart then
-                        local dirUnit = (targetPart.Position - origin).Unit
-                        
-                        -- 【大腦升級】如果是弓箭 (isProj)，絕對不能把長度變成 1500！
-                        -- 否則伺服器的防作弊會判定「箭矢瞬間移動」而沒收傷害。
-                        -- 必須保留原來的短距離長度，讓箭矢保持原速，在空中自動轉彎變成「追蹤導彈」！
-                        if direction.Magnitude <= 100 then
-                            direction = dirUnit * direction.Magnitude
-                        else
-                            direction = dirUnit * math.max(direction.Magnitude, 1500)
-                        end
-                        
-                        args[argDirIndex] = direction
-                        -- 畫出軌跡 (如果是弓箭，你會看到一條一條短線連成彎曲的追蹤軌跡)
-                        if direction.Magnitude > 100 then
-                            CreateTracer(origin, origin + (direction.Unit * 250))
-                        end
-                        if setnamecallmethod then setnamecallmethod(method) end
-                        return oldNamecall(self, unpack(args, 1, argCount))
-                    end
-                    -- 沒開自瞄時，只幫長距離子彈畫軌跡
-                    if direction.Magnitude > 100 then
-                        CreateTracer(origin, origin + (direction.Unit * 250))
-                    end
-                end
-            elseif method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay" then
-                local originRay = args[1].Origin
-                local directionRay = args[1].Direction
+            local origin = args[1]
+            local direction = args[2]
+            if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
+                local targetPart = CachedMagicBulletTargetPart
+                local isMagic = Toggles.MagicBullet and targetPart
                 
-                local isProj = false
-                if directionRay.Magnitude <= 100 then
-                    local char = LocalPlayer.Character
-                    if char then
-                        local hrp = char:FindFirstChild("HumanoidRootPart")
-                        local head = char:FindFirstChild("Head")
-                        local camPos = Workspace.CurrentCamera and Workspace.CurrentCamera.CFrame.Position
-                        local d1 = hrp and (originRay - hrp.Position).Magnitude or 100
-                        local d2 = head and (originRay - head.Position).Magnitude or 100
-                        local d3 = camPos and (originRay - camPos).Magnitude or 100
-                        if d1 > 5 and d2 > 5 and d3 > 5 then
-                            isProj = true
-                        end
-                    end
+                if isMagic then
+                    direction = (targetPart.Position - origin).Unit * 1000
+                    args[2] = direction
+                    if setnamecallmethod then setnamecallmethod(method) end
+                    return oldNamecall(self, unpack(args, 1, argCount))
                 end
                 
-                if directionRay.Magnitude > 100 or isProj then
-                    local targetPart = CachedMagicBulletTargetPart
-                    if Toggles.MagicBullet and targetPart then
-                        local dirUnit = (targetPart.Position - originRay).Unit
-                        
-                        if directionRay.Magnitude <= 100 then
-                            directionRay = dirUnit * directionRay.Magnitude
-                        else
-                            directionRay = dirUnit * math.max(directionRay.Magnitude, 1500)
-                        end
-                        
-                        args[1] = Ray.new(originRay, directionRay)
-                        if directionRay.Magnitude > 100 then
-                            CreateTracer(originRay, originRay + (directionRay.Unit * 250))
-                        end
-                        if setnamecallmethod then setnamecallmethod(method) end
-                        return oldNamecall(self, unpack(args, 1, argCount))
-                    end
-                    if directionRay.Magnitude > 100 then
-                        CreateTracer(originRay, originRay + (directionRay.Unit * 250))
-                    end
-                end
+                CreateTracer(origin, origin + (direction.Unit * 250))
             end
-        elseif self == Workspace.CurrentCamera and (method == "ScreenPointToRay" or method == "ViewportPointToRay") then
-            -- 攔截由相機發出的準心射線 (弓箭等飛行物多半依賴這個來決定初始方向)
-            local targetPart = CachedMagicBulletTargetPart
-            if Toggles.MagicBullet and targetPart then
-                local origin = self.CFrame.Position
-                local direction = (targetPart.Position - origin).Unit
-                if setnamecallmethod then setnamecallmethod(method) end
-                return Ray.new(origin, direction)
+        elseif self == Workspace and (method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay") then
+            local argCount = select("#", ...)
+            local args = {...}
+            local origin = args[1].Origin
+            local direction = args[1].Direction
+            if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
+                local targetPart = CachedMagicBulletTargetPart
+                local isMagic = Toggles.MagicBullet and targetPart
+                
+                if isMagic then
+                    direction = (targetPart.Position - origin).Unit * 1000
+                    args[1] = Ray.new(origin, direction)
+                    if setnamecallmethod then setnamecallmethod(method) end
+                    return oldNamecall(self, unpack(args, 1, argCount))
+                end
+                
+                CreateTracer(origin, origin + (direction.Unit * 250))
             end
         end
     end
@@ -1462,65 +1375,6 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
     if setnamecallmethod then setnamecallmethod(method) end
     return oldNamecall(self, ...)
 end))
-
--- 攔截滑鼠點擊位置 (弓箭/投擲物專用)
-local oldIndex
-oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, idx)
-    if not checkcaller() and Toggles.MagicBullet and IsShooting and CachedMagicBulletTargetPart then
-        if typeof(self) == "Instance" and self:IsA("Mouse") then
-            if idx == "Hit" then
-                return CachedMagicBulletTargetPart.CFrame
-            elseif idx == "Target" then
-                return CachedMagicBulletTargetPart
-            end
-        end
-    end
-    return oldIndex(self, idx)
-end))
-
---------------------------------------------------------------------------------
--- 實體導彈追蹤系統 (專治非 Raycast 的拋物線武器如弓箭)
---------------------------------------------------------------------------------
-Workspace.ChildAdded:Connect(function(child)
-    if not Toggles.MagicBullet then return end
-    
-    -- 延遲一下讓遊戲把飛行物設定好
-    task.delay(0.05, function()
-        if not child or not child.Parent or not CachedMagicBulletTargetPart then return end
-        
-        local isProj = false
-        local name = child.Name:lower()
-        
-        -- 判斷是否為實體飛行物 (箭矢、火箭等)
-        if name:find("arrow") or name:find("proj") or name:find("rocket") or name:find("missile") then
-            isProj = true
-        elseif child:IsA("BasePart") and child.Size.Magnitude < 5 and child.Velocity.Magnitude > 30 then
-            -- 有些遊戲直接叫 "Part"，用速度來判斷它是子彈
-            isProj = true
-        end
-        
-        if isProj then
-            -- 持續追蹤導航 (持續 1 秒)
-            task.spawn(function()
-                for i = 1, 20 do
-                    if not child or not child.Parent or not CachedMagicBulletTargetPart then break end
-                    local root = child:IsA("BasePart") and child or child.PrimaryPart or child:FindFirstChildWhichIsA("BasePart")
-                    if root then
-                        local targetPos = CachedMagicBulletTargetPart.Position
-                        local dir = (targetPos - root.Position).Unit
-                        local speed = root.Velocity.Magnitude
-                        if speed < 50 then speed = 150 end -- 保底速度
-                        
-                        -- 覆寫物理速度與朝向，實現物理層面的「半空轉彎」
-                        root.Velocity = dir * speed
-                        root.CFrame = CFrame.new(root.Position, targetPos)
-                    end
-                    task.wait(0.05)
-                end
-            end)
-        end
-    end)
-end)
 
 --------------------------------------------------------------------------------
 -- 建立 UI 選單
