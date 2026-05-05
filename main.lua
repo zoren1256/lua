@@ -1196,8 +1196,6 @@ RunService.RenderStepped:Connect(function()
             task.delay(0.05, function() mouse1release() end)
         end
     end
-    
-    end
 end)
 
 -- 極限隱藏武器系統 (Absolute Priority 覆蓋)
