@@ -805,37 +805,46 @@ local function isEnemy(player)
     if player == LocalPlayer then return false end
     if not Toggles.TeamCheck then return true end
     
+    -- 確保隊伍數值不是預設的佔位符 (防範遊戲給每個人塞一樣的幽靈隊伍)
+    local function isValidTeam(val)
+        if val == nil then return false end
+        local str = tostring(val):lower()
+        if str == "" or str == "none" or str == "neutral" or str == "lobby" or str == "playing" or str == "alive" or str == "ffa" or str == "default" or str == "spectator" then
+            return false
+        end
+        return true
+    end
+
     -- 1. 基礎 Team 屬性
     if LocalPlayer.Team ~= nil and player.Team ~= nil then
-        if LocalPlayer.Team == player.Team then return false end
+        if LocalPlayer.Team == player.Team and isValidTeam(LocalPlayer.Team.Name) then 
+            return false 
+        end
     end
     
-    -- 2. 基礎 TeamColor 屬性
-    if LocalPlayer.TeamColor ~= nil and player.TeamColor ~= nil then
-        if LocalPlayer.TeamColor == player.TeamColor then return false end
-    end
+    -- (已移除危險的 TeamColor 檢查，因為在沒設定的遊戲裡，大家都是預設的 White)
     
-    -- 3. Player Attributes 檢查 (Rivals 等現代遊戲愛用)
+    -- 2. Player Attributes 檢查
     for _, attrName in pairs({"Team", "team", "TeamName", "Squad", "Group"}) do
         local lpAttr = LocalPlayer:GetAttribute(attrName)
         local pAttr = player:GetAttribute(attrName)
-        if lpAttr ~= nil and pAttr ~= nil then
+        if lpAttr ~= nil and pAttr ~= nil and isValidTeam(lpAttr) then
             if lpAttr == pAttr then return false end
         end
     end
     
-    -- 4. Character Attributes 檢查
+    -- 3. Character Attributes 檢查
     if LocalPlayer.Character and player.Character then
         for _, attrName in pairs({"Team", "team", "TeamName", "Squad"}) do
             local lpAttr = LocalPlayer.Character:GetAttribute(attrName)
             local pAttr = player.Character:GetAttribute(attrName)
-            if lpAttr ~= nil and pAttr ~= nil then
+            if lpAttr ~= nil and pAttr ~= nil and isValidTeam(lpAttr) then
                 if lpAttr == pAttr then return false end
             end
         end
     end
     
-    -- 5. 自訂 Team Value 檢查 (通常在 Player 或 leaderstats 裡面)
+    -- 4. 自訂 Team Value 檢查 (通常在 Player 或 leaderstats 裡面)
     local function checkValueBase(parent)
         if not parent then return nil end
         for _, child in pairs(parent:GetChildren()) do
@@ -849,7 +858,7 @@ local function isEnemy(player)
     local lpVal = checkValueBase(LocalPlayer) or checkValueBase(LocalPlayer:FindFirstChild("leaderstats"))
     local pVal = checkValueBase(player) or checkValueBase(player:FindFirstChild("leaderstats"))
     
-    if lpVal ~= nil and pVal ~= nil then
+    if lpVal ~= nil and pVal ~= nil and isValidTeam(lpVal) then
         if lpVal == pVal then return false end
     end
 
