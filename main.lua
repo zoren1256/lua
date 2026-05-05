@@ -1360,30 +1360,70 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
             end
             
             if isRaycast and origin and direction and typeof(direction) == "Vector3" then
-                -- 恢復 100 的限制：因為太短的射線會影響人物移動跟視角，導致「開槍會飛起來」的 BUG
-                if direction.Magnitude > 100 then
+                -- 判斷是否為拋物線飛行物 (如果射線起點離自己超過 5 單位，代表是飛出去的箭矢)
+                local isProj = false
+                if direction.Magnitude <= 100 then
+                    local char = LocalPlayer.Character
+                    if char then
+                        local hrp = char:FindFirstChild("HumanoidRootPart")
+                        local head = char:FindFirstChild("Head")
+                        local camPos = Workspace.CurrentCamera and Workspace.CurrentCamera.CFrame.Position
+                        local d1 = hrp and (origin - hrp.Position).Magnitude or 100
+                        local d2 = head and (origin - head.Position).Magnitude or 100
+                        local d3 = camPos and (origin - camPos).Magnitude or 100
+                        if d1 > 5 and d2 > 5 and d3 > 5 then
+                            isProj = true
+                        end
+                    end
+                end
+
+                if direction.Magnitude > 100 or isProj then
                     local targetPart = CachedMagicBulletTargetPart
                     if Toggles.MagicBullet and targetPart then
                         direction = (targetPart.Position - origin).Unit * math.max(direction.Magnitude, 1500)
                         args[argDirIndex] = direction
+                        -- 在被修改的射線起點畫出軌跡 (如果是弓箭，這會在半空中折射)
+                        CreateTracer(origin, origin + (direction.Unit * 250))
                         if setnamecallmethod then setnamecallmethod(method) end
                         return oldNamecall(self, unpack(args, 1, argCount))
                     end
-                    CreateTracer(origin, origin + (direction.Unit * 250))
+                    -- 如果沒鎖定敵人，只幫長距離子彈畫軌跡 (避免弓箭畫出密集的線)
+                    if direction.Magnitude > 100 then
+                        CreateTracer(origin, origin + (direction.Unit * 250))
+                    end
                 end
             elseif method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay" then
                 local originRay = args[1].Origin
                 local directionRay = args[1].Direction
                 
-                if directionRay.Magnitude > 100 then
+                local isProj = false
+                if directionRay.Magnitude <= 100 then
+                    local char = LocalPlayer.Character
+                    if char then
+                        local hrp = char:FindFirstChild("HumanoidRootPart")
+                        local head = char:FindFirstChild("Head")
+                        local camPos = Workspace.CurrentCamera and Workspace.CurrentCamera.CFrame.Position
+                        local d1 = hrp and (originRay - hrp.Position).Magnitude or 100
+                        local d2 = head and (originRay - head.Position).Magnitude or 100
+                        local d3 = camPos and (originRay - camPos).Magnitude or 100
+                        if d1 > 5 and d2 > 5 and d3 > 5 then
+                            isProj = true
+                        end
+                    end
+                end
+                
+                if directionRay.Magnitude > 100 or isProj then
                     local targetPart = CachedMagicBulletTargetPart
                     if Toggles.MagicBullet and targetPart then
                         directionRay = (targetPart.Position - originRay).Unit * math.max(directionRay.Magnitude, 1500)
                         args[1] = Ray.new(originRay, directionRay)
+                        CreateTracer(originRay, originRay + (directionRay.Unit * 250))
                         if setnamecallmethod then setnamecallmethod(method) end
                         return oldNamecall(self, unpack(args, 1, argCount))
                     end
-                    CreateTracer(originRay, originRay + (directionRay.Unit * 250))
+                    if directionRay.Magnitude > 100 then
+                        CreateTracer(originRay, originRay + (directionRay.Unit * 250))
+                    end
                 end
             end
         elseif self == Workspace.CurrentCamera and (method == "ScreenPointToRay" or method == "ViewportPointToRay") then
