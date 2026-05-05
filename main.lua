@@ -1,5 +1,5 @@
 --[[
-    ZRN Hub - Rivals 專屬版本
+    Pony - Rivals 專屬版本
     語言：繁體中文
 ]]
 
@@ -40,6 +40,7 @@ local Toggles = {
     HideWeapon = false,
     CustomGunSound = false,
     SilentGun = true,
+    SkinSwapper = true,
     TeamCheck = true
 }
 
@@ -56,6 +57,7 @@ local Settings = {
     SpinSpeed = 50,
     WalkSpeed = 16,
     JumpPower = 50,
+    SkinID = "rbxassetid://12595015383", -- 預設一個酷炫的貼圖 (可以自行更換)
     CustomGunSoundID = "rbxassetid://160432334"
 }
 
@@ -64,7 +66,7 @@ local Settings = {
 --------------------------------------------------------------------------------
 local function CreateSnow()
     local snowPart = Instance.new("Part")
-    snowPart.Name = "ZRNSnowPart"
+    snowPart.Name = "PonySnowPart"
     snowPart.Size = Vector3.new(300, 1, 300)
     snowPart.Transparency = 1
     snowPart.Anchored = true
@@ -97,10 +99,10 @@ local function CreateSnow()
     
 
     -- 建立一個純黑無星空的 Skybox 覆蓋遊戲原本的天空
-    local customSky = Lighting:FindFirstChild("ZRNSky")
+    local customSky = Lighting:FindFirstChild("PonySky")
     if not customSky then
         customSky = Instance.new("Sky")
-        customSky.Name = "ZRNSky"
+        customSky.Name = "PonySky"
         customSky.SkyboxBk = ""
         customSky.SkyboxDn = ""
         customSky.SkyboxFt = ""
@@ -115,19 +117,19 @@ local function CreateSnow()
     -- 強制移除遊戲本身其他的 Skybox，確保我們的純黑天空生效
     local function removeOtherSkies()
         for _, v in pairs(Lighting:GetChildren()) do
-            if v:IsA("Sky") and v.Name ~= "ZRNSky" then v:Destroy() end
+            if v:IsA("Sky") and v.Name ~= "PonySky" then v:Destroy() end
         end
     end
     removeOtherSkies()
     Lighting.ChildAdded:Connect(function(v)
-        if v:IsA("Sky") and v.Name ~= "ZRNSky" then task.wait() v:Destroy() end
+        if v:IsA("Sky") and v.Name ~= "PonySky" then task.wait() v:Destroy() end
     end)
     
     -- 加入冷色調濾鏡 (保留雪天的冷峻氛圍)
-    local colorCorrection = Lighting:FindFirstChild("ZRNSnowColorCorrection")
+    local colorCorrection = Lighting:FindFirstChild("PonyColorCorrection")
     if not colorCorrection then
         colorCorrection = Instance.new("ColorCorrectionEffect")
-        colorCorrection.Name = "ZRNSnowColorCorrection"
+        colorCorrection.Name = "PonyColorCorrection"
         colorCorrection.Parent = Lighting
     end
     
@@ -168,7 +170,7 @@ end
 --------------------------------------------------------------------------------
 local function CreateDynamicCrosshair()
     local crosshairGui = Instance.new("ScreenGui")
-    crosshairGui.Name = "ZRNDynamicCrosshair"
+    crosshairGui.Name = "PONYDynamicCrosshair"
     crosshairGui.ResetOnSpawn = false
     crosshairGui.IgnoreGuiInset = true
     
@@ -281,30 +283,30 @@ local Theme = {
 }
 
 function Library:CreateWindow(config)
-    local WindowName = config.Name or "ZRN HUB"
+    local WindowName = config.Name or "PONY"
     local WindowSize = config.Size or UDim2.new(0, 600, 0, 400)
 
-    local ZRN_GUI = Instance.new("ScreenGui")
-    ZRN_GUI.Name = "ZRNHub_" .. tostring(math.random(10000, 99999))
-    ZRN_GUI.ResetOnSpawn = false
-    ZRN_GUI.IgnoreGuiInset = true
+    local PONY_GUI = Instance.new("ScreenGui")
+    PONY_GUI.Name = "Pony_Rivals"
+    PONY_GUI.ResetOnSpawn = false
+    PONY_GUI.IgnoreGuiInset = true
     
     local function MountUI()
         local s1, e1 = pcall(function()
             if gethui then
-                ZRN_GUI.Parent = gethui()
+                PONY_GUI.Parent = gethui()
             elseif type(syn) == "table" and type(syn.protect_gui) == "function" then
-                syn.protect_gui(ZRN_GUI)
-                ZRN_GUI.Parent = CoreGui
+                syn.protect_gui(PONY_GUI)
+                PONY_GUI.Parent = CoreGui
             else
-                ZRN_GUI.Parent = CoreGui
+                PONY_GUI.Parent = CoreGui
             end
         end)
-        if not s1 or not ZRN_GUI.Parent then
+        if not s1 or not PONY_GUI.Parent then
             if LocalPlayer then
                 local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
                 if playerGui then
-                    ZRN_GUI.Parent = playerGui
+                    PONY_GUI.Parent = playerGui
                 end
             end
         end
@@ -313,7 +315,7 @@ function Library:CreateWindow(config)
 
     local MainFrame = Instance.new("Frame")
     MainFrame.Name = "MainFrame"
-    MainFrame.Parent = ZRN_GUI
+    MainFrame.Parent = PONY_GUI
     MainFrame.BackgroundColor3 = Theme.Background
     MainFrame.BorderSizePixel = 0
     MainFrame.Position = UDim2.new(0.5, -WindowSize.X.Offset/2, 0.5, -WindowSize.Y.Offset/2)
@@ -384,7 +386,7 @@ function Library:CreateWindow(config)
             if setclipboard then
                 setclipboard("https://discord.gg/DgaS3UFdE2")
                 game.StarterGui:SetCore("SendNotification", {
-                    Title = "ZRN Hub",
+                    Title = "PONY",
                     Text = "Discord 連結已經複製到你的剪貼簿！請在瀏覽器貼上。",
                     Duration = 5,
                 })
@@ -429,7 +431,7 @@ function Library:CreateWindow(config)
 
     UserInputService.InputBegan:Connect(function(input)
         if input.KeyCode == Enum.KeyCode.RightControl then
-            ZRN_GUI.Enabled = not ZRN_GUI.Enabled
+            PONY_GUI.Enabled = not PONY_GUI.Enabled
         end
     end)
 
@@ -437,7 +439,7 @@ function Library:CreateWindow(config)
     
     function Window:PlayIntro()
         local IntroFrame = Instance.new("Frame")
-        IntroFrame.Parent = ZRN_GUI
+        IntroFrame.Parent = PONY_GUI
         IntroFrame.BackgroundColor3 = Theme.Background
         IntroFrame.Size = UDim2.new(0, 300, 0, 100)
         IntroFrame.Position = UDim2.new(0.5, -150, 0.5, -50)
@@ -449,7 +451,7 @@ function Library:CreateWindow(config)
         IntroTitle.Size = UDim2.new(1, 0, 1, -20)
         IntroTitle.Position = UDim2.new(0, 0, 0, 0)
         IntroTitle.BackgroundTransparency = 1
-        IntroTitle.Text = "ZRN HUB"
+        IntroTitle.Text = "PONY RIVALS"
         IntroTitle.Font = Enum.Font.GothamBold
         IntroTitle.TextSize = 28
         IntroTitle.TextColor3 = Theme.MainColor
@@ -771,7 +773,7 @@ local function getSmartTargetPart(character)
     if not Camera then return nil end
     local raycastParams = RaycastParams.new()
     local filterList = {LocalPlayer.Character, Camera, Workspace.Terrain}
-    if Workspace:FindFirstChild("ZRNSnowPart") then table.insert(filterList, Workspace.ZRNSnowPart) end
+    if Workspace:FindFirstChild("PONYSnowPart") then table.insert(filterList, Workspace.PONYSnowPart) end
     raycastParams.FilterDescendantsInstances = filterList
     raycastParams.FilterType = Enum.RaycastFilterType.Exclude
     raycastParams.IgnoreWater = true
@@ -943,10 +945,10 @@ local function createESP(player)
             if not head or not hrp or not hum then return end
 
         local targetParent = gethui and gethui() or CoreGui
-        local mainESPFolder = targetParent:FindFirstChild("ZRN_Rivals_ESP_Container")
+        local mainESPFolder = targetParent:FindFirstChild("PONY_Rivals_ESP_Container")
         if not mainESPFolder then
             mainESPFolder = Instance.new("Folder")
-            mainESPFolder.Name = "ZRN_Rivals_ESP_Container"
+            mainESPFolder.Name = "PONY_Rivals_ESP_Container"
             mainESPFolder.Parent = targetParent
         end
         
@@ -1208,12 +1210,12 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- 極限隱藏武器系統 (Absolute Priority 覆蓋)
-RunService:BindToRenderStep("ZRN_HideWeapon_Ultra", Enum.RenderPriority.Last.Value + 9000, function()
+RunService:BindToRenderStep("Pony_HideWeapon_Ultra", Enum.RenderPriority.Last.Value + 9000, function()
     if Toggles.HideWeapon then
         -- 1. 隱藏 Camera 內的所有 ViewModel (排除我們的 Tracer)
         if Workspace.CurrentCamera then
             for _, obj in pairs(Workspace.CurrentCamera:GetDescendants()) do
-                if obj:IsA("BasePart") and obj.Name ~= "ZRN_Tracer" then 
+                if obj:IsA("BasePart") and obj.Name ~= "Pony_Tracer" then 
                     obj.LocalTransparencyModifier = 1 
                 end
             end
@@ -1236,7 +1238,7 @@ RunService:BindToRenderStep("ZRN_HideWeapon_Ultra", Enum.RenderPriority.Last.Val
                     local name = obj.Name:lower()
                     if name:find("view") or name:find("arm") or name:find("weapon") or name:find("gun") or name:find("fp") or name:find("firstperson") then
                         for _, p in pairs(obj:GetDescendants()) do
-                            if p:IsA("BasePart") and p.Name ~= "ZRN_Tracer" then 
+                            if p:IsA("BasePart") and p.Name ~= "Pony_Tracer" then 
                                 p.LocalTransparencyModifier = 1 
                             end
                         end
@@ -1248,7 +1250,7 @@ RunService:BindToRenderStep("ZRN_HideWeapon_Ultra", Enum.RenderPriority.Last.Val
 end)
 
 -- 第三人稱視角 (Third Person) 強制覆蓋遊戲相機腳本
-RunService:BindToRenderStep("ZRN_ThirdPerson", Enum.RenderPriority.Camera.Value + 10, function()
+RunService:BindToRenderStep("Pony_ThirdPerson", Enum.RenderPriority.Camera.Value + 10, function()
     if Toggles.ThirdPerson and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head") then
         local Camera = Workspace.CurrentCamera
         if Camera then
@@ -1268,11 +1270,71 @@ end)
 --------------------------------------------------------------------------------
 -- 靜默追蹤
 --------------------------------------------------------------------------------
+-- 換膚邏輯 (極限改造：將槍枝替換為數位雜訊團)
+local function ApplySkin(obj)
+    if not obj then return end
+    for _, part in pairs(obj:GetDescendants()) do
+        if part:IsA("BasePart") then
+            -- 1. 隱藏原本的槍身零件
+            part.Transparency = 1
+            
+            -- 2. 在零件中心注入雜訊粒子 (只在主體零件注入，避免粒子過多卡頓)
+            local name = part.Name:lower()
+            if not part:FindFirstChild("Pony_GlitchCloud") and (name:find("handle") or name:find("body") or name:find("barrel") or name:find("gun")) then
+                local emitter = Instance.new("ParticleEmitter")
+                emitter.Name = "Pony_GlitchCloud"
+                emitter.Texture = "rbxassetid://451336109" -- 數位雜訊貼圖
+                emitter.Color = ColorSequence.new(Color3.fromRGB(180, 50, 255)) -- 霓虹紫
+                emitter.Size = NumberSequence.new({
+                    NumberSequenceKeypoint.new(0, 0.8),
+                    NumberSequenceKeypoint.new(0.5, 1.5),
+                    NumberSequenceKeypoint.new(1, 0)
+                })
+                emitter.Rate = 1000 -- 極高密度
+                emitter.Speed = NumberRange.new(0, 3)
+                emitter.Lifetime = NumberRange.new(0.1, 0.3) -- 快速閃爍
+                emitter.Transparency = NumberSequence.new(0.2, 1)
+                emitter.SpreadAngle = Vector2.new(360, 360)
+                emitter.RotSpeed = NumberRange.new(-500, 500)
+                emitter.Parent = part
+                
+                -- 增加發光電氣感
+                local light = Instance.new("PointLight")
+                light.Color = Color3.fromRGB(180, 50, 255)
+                light.Range = 5
+                light.Brightness = 2
+                light.Parent = part
+            end
+        end
+    end
+end
+
+RunService.RenderStepped:Connect(function()
+    if Toggles.SkinSwapper then
+        -- 1. 替換第一人稱手部武器 (ViewModel)
+        if Workspace.CurrentCamera then
+            for _, obj in pairs(Workspace.CurrentCamera:GetChildren()) do
+                if obj:IsA("Model") or obj:IsA("Part") then
+                    local name = obj.Name:lower()
+                    if name:find("view") or name:find("arm") or name:find("weapon") or name:find("gun") then
+                        ApplySkin(obj)
+                    end
+                end
+            end
+        end
+        -- 2. 替換角色身上的武器
+        if LocalPlayer.Character then
+            local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
+            if tool then ApplySkin(tool) end
+        end
+    end
+end)
+
 local function CreateTracer(origin, endPoint)
     task.spawn(function()
         local distance = (endPoint - origin).Magnitude
         local tracer = Instance.new("Part")
-        tracer.Name = "ZRN_Tracer"
+        tracer.Name = "Pony_Tracer"
         tracer.Anchored = true
         tracer.CanCollide = false
         tracer.Transparency = 0.2
@@ -1403,7 +1465,7 @@ end))
 --------------------------------------------------------------------------------
 
 local Window = Library:CreateWindow({
-    Name = "ZRN HUB - RIVALS",
+    Name = "PONY - RIVALS",
     Size = UDim2.new(0, 550, 0, 380)
 })
 
@@ -1465,10 +1527,10 @@ RunService.RenderStepped:Connect(function()
     local hum = LocalPlayer.Character:FindFirstChild("Humanoid")
     
     if flying and hrp and hum then
-        local flyVelocity = hrp:FindFirstChild("ZRN_FlyVelocity")
+        local flyVelocity = hrp:FindFirstChild("PONY_FlyVelocity")
         if not flyVelocity then
             flyVelocity = Instance.new("BodyVelocity")
-            flyVelocity.Name = "ZRN_FlyVelocity"
+            flyVelocity.Name = "PONY_FlyVelocity"
             flyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
             flyVelocity.Velocity = Vector3.new(0, 0, 0)
             flyVelocity.Parent = hrp
@@ -1484,7 +1546,7 @@ RunService.RenderStepped:Connect(function()
         end
     else
         if hrp then
-            local flyVelocity = hrp:FindFirstChild("ZRN_FlyVelocity")
+            local flyVelocity = hrp:FindFirstChild("PONY_FlyVelocity")
             if flyVelocity then flyVelocity:Destroy() end
         end
     end
@@ -1510,10 +1572,10 @@ RunService.RenderStepped:Connect(function(deltaTime)
     
     -- 自動旋轉 (SpinBot)
     if Toggles.SpinBot and hrp then
-        local spinVelo = hrp:FindFirstChild("ZRN_Spin")
+        local spinVelo = hrp:FindFirstChild("PONY_Spin")
         if not spinVelo then
             spinVelo = Instance.new("BodyAngularVelocity")
-            spinVelo.Name = "ZRN_Spin"
+            spinVelo.Name = "PONY_Spin"
             spinVelo.MaxTorque = Vector3.new(0, math.huge, 0)
             spinVelo.AngularVelocity = Vector3.new(0, Settings.SpinSpeed, 0)
             spinVelo.Parent = hrp
@@ -1522,7 +1584,7 @@ RunService.RenderStepped:Connect(function(deltaTime)
         end
     else
         if hrp then
-            local spinVelo = hrp:FindFirstChild("ZRN_Spin")
+            local spinVelo = hrp:FindFirstChild("PONY_Spin")
             if spinVelo then spinVelo:Destroy() end
         end
     end
@@ -1612,12 +1674,14 @@ ExploitTab:CreateToggle("自動回血", false, function(state)
     Toggles.AutoHeal = state
 end)
 
+-- 強制換膚已設為預設開啟且不顯示於 UI
+
 
 -- 雜項分頁
 local MiscTab = Window:CreateTab("雜項")
 
 MiscTab:CreateButton("強制關閉腳本", function()
-    local gui = CoreGui:FindFirstChild("ZRNHub_Rivals") or LocalPlayer:WaitForChild("PlayerGui"):FindFirstChild("ZRNHub_Rivals")
+    local gui = CoreGui:FindFirstChild("Pony_Rivals") or LocalPlayer:WaitForChild("PlayerGui"):FindFirstChild("Pony_Rivals")
     if gui then gui:Destroy() end
     if FOVCircle then FOVCircle:Remove() end
 end)
@@ -1632,7 +1696,7 @@ task.spawn(function()
     task.wait(3.5) -- 等待動畫播完再發送通知
     pcall(function()
         game.StarterGui:SetCore("SendNotification", {
-            Title = "ZRN Hub",
+            Title = "Pony",
             Text = "Rivals 版本載入成功！按 RightControl 隱藏介面。",
             Duration = 5,
         })
