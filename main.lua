@@ -38,9 +38,7 @@ local Toggles = {
     SmartTrigger = false,
     HideWeapon = false,
     CustomGunSound = true,
-    TeamCheck = true,
-    RapidFire = false,
-    MuzzleTP = false
+    TeamCheck = true
 }
 
 local Settings = {
@@ -56,8 +54,7 @@ local Settings = {
     SpinSpeed = 50,
     WalkSpeed = 16,
     JumpPower = 50,
-    CustomGunSoundID = "rbxassetid://413861139", -- 清脆的鈴鐺叮叮聲 (原本是超吵的槍聲),
-    FireRateDelay = 0.05 -- 射速間隔 (秒)，數字越小越快
+    CustomGunSoundID = "rbxassetid://160432334"
 }
 
 --------------------------------------------------------------------------------
@@ -1068,15 +1065,11 @@ Players.PlayerAdded:Connect(createESP)
 -- 核心渲染迴圈 (Aimbot & FOV)
 local AimbotHolding = false
 local IsShooting = false
-local PhysicalMouseDown = false -- 用來區分玩家真實按鍵與腳本模擬按鍵
 
 UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
     if input.UserInputType == Enum.UserInputType.MouseButton2 then AimbotHolding = true end
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then 
-        IsShooting = true 
-        PhysicalMouseDown = true
-    end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then IsShooting = true end
     
     -- 瞬移攻擊 (Teleport to Target)
     if input.KeyCode == Enum.KeyCode.T then
@@ -1093,27 +1086,7 @@ UserInputService.InputBegan:Connect(function(input, gpe)
 end)
 UserInputService.InputEnded:Connect(function(input, gpe)
     if input.UserInputType == Enum.UserInputType.MouseButton2 then AimbotHolding = false end
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then 
-        IsShooting = false 
-        PhysicalMouseDown = false
-    end
-end)
-
--- 子彈射速調整 (Rapid Fire)
--- 原理：玩家按住左鍵時，外掛在背景高速「放開→重新按下」來模擬連點
-task.spawn(function()
-    while true do
-        -- 使用 UserInputService 直接檢查物理按鍵狀態，避免被腳本模擬的放開/按下干擾
-        local isActuallyDown = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
-        if Toggles.RapidFire and isActuallyDown then
-            mouse1release()
-            task.wait(0.001)
-            mouse1press()
-            task.wait(math.max(Settings.FireRateDelay, 0.05)) -- 限制最低 0.05s (每秒 20 發)，防止被 Rivals 防火牆擋下
-        else
-            task.wait(0.1)
-        end
-    end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then IsShooting = false end
 end)
 
 local CachedMagicBulletTargetPart = nil
@@ -1303,49 +1276,31 @@ local function CreateTracer(origin, endPoint)
     end)
 end
 
--- 自訂檢查父節點函數，放在全局避免重複宣告
-local function checkDescendant(obj, target)
-    if not obj or not target then return false end
-    local current = obj
-    while current do
-        if current == target then return true end
-        current = current.Parent
-    end
-    return false
-end
-
--- 槍口位置欺騙 (Muzzle Spoofing) - 真正的穿牆原理
-local oldIndex
-oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, prop)
-    if not checkcaller() and Toggles.MuzzleTP then
-        if prop == "WorldPosition" or prop == "Position" then
-            local name = self.Name:lower()
-            if name:find("muzzle") or name:find("tip") or name:find("barrel") or name:find("fire") then
-                local targetPart = CachedMagicBulletTargetPart
-                if targetPart then
-                    -- 騙過遊戲腳本，讓它以為槍口就在敵人前面 3 studs 的空中
-                    return targetPart.Position + (Camera.CFrame.Position - targetPart.Position).Unit * 3
-                end
-            end
-        end
-    end
-    return oldIndex(self, prop)
-end))
-
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
     local method = getnamecallmethod()
-    local argCount = select("#", ...)
-    local args = {...}
 
-    -- 1. 槍聲替換邏輯
+    -- 自訂檢查父節點函數，避免使用 :IsDescendantOf 污染 namecall method
+    local function checkDescendant(obj, target)
+        if not obj or not target then return false end
+        local current = obj
+        while current do
+            if current == target then return true end
+            current = current.Parent
+        end
+        return false
+    end
+
     if (method == "Play" or method == "PlayLocalSound") and not checkcaller() then
         local soundObj = self
-        if method == "PlayLocalSound" then soundObj = args[1] end
+        if method == "PlayLocalSound" then
+            soundObj = select(1, ...)
+        end
         
         if typeof(soundObj) == "Instance" and soundObj.ClassName == "Sound" then
             if Toggles.CustomGunSound then
                 local soundName = soundObj.Name:lower()
+                -- 排除腳步聲、換彈等非槍聲
                 local isIgnored = soundName:find("reload") or soundName:find("mag") or soundName:find("clip") or soundName:find("equip") or soundName:find("pull") or soundName:find("step") or soundName:find("walk") or soundName:find("run") or soundName:find("foot")
                 
                 if not isIgnored then
@@ -1353,14 +1308,17 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
                     local inTool = false
                     if LocalPlayer.Character then
                         local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
-                        if tool and checkDescendant(soundObj, tool) then inTool = true end
+                        if tool and checkDescendant(soundObj, tool) then
+                            inTool = true
+                        end
                     end
                     
+                    -- 如果聲音在武器裡、或者剛好玩家正在開槍 (IsShooting) 且聲音沒有被排除
                     if inCamera or inTool or IsShooting then
                         task.spawn(function()
                             local customSound = Instance.new("Sound")
                             customSound.SoundId = Settings.CustomGunSoundID
-                            customSound.Volume = 0.8 -- 調低音量，避免連射太吵
+                            customSound.Volume = 2
                             customSound.Parent = Workspace
                             customSound:Play()
                             task.wait(2)
@@ -1374,34 +1332,19 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
         end
     end
 
-    -- 2. 戰鬥邏輯 (Raycast / MuzzleTP / MagicBullet)
     if IsShooting and not checkcaller() then
         if self == Workspace and method == "Raycast" then
+            local argCount = select("#", ...)
+            local args = {...}
             local origin = args[1]
             local direction = args[2]
             if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
                 local targetPart = CachedMagicBulletTargetPart
+                local isMagic = Toggles.MagicBullet and targetPart
                 
-                -- 槍口傳送 (Muzzle TP)
-                if Toggles.MuzzleTP and targetPart then
-                    local wallIgnoreParams = RaycastParams.new()
-                    wallIgnoreParams.FilterType = Enum.RaycastFilterType.Include
-                    local charList = {}
-                    for _, p in pairs(Players:GetPlayers()) do
-                        if p ~= LocalPlayer and p.Character then table.insert(charList, p.Character) end
-                    end
-                    wallIgnoreParams.FilterDescendantsInstances = charList
-                    
-                    args[2] = (targetPart.Position - origin).Unit * 1000
-                    args[3] = wallIgnoreParams
-                    CreateTracer(origin, targetPart.Position)
-                    if setnamecallmethod then setnamecallmethod(method) end
-                    return oldNamecall(self, unpack(args, 1, math.max(argCount, 3)))
-                end
-                
-                -- 靜默追蹤 (Magic Bullet)
-                if Toggles.MagicBullet and targetPart then
-                    args[2] = (targetPart.Position - origin).Unit * 1000
+                if isMagic then
+                    direction = (targetPart.Position - origin).Unit * 1000
+                    args[2] = direction
                     if setnamecallmethod then setnamecallmethod(method) end
                     return oldNamecall(self, unpack(args, 1, argCount))
                 end
@@ -1409,32 +1352,17 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
                 CreateTracer(origin, origin + (direction.Unit * 250))
             end
         elseif self == Workspace and (method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay") then
+            local argCount = select("#", ...)
+            local args = {...}
             local origin = args[1].Origin
             local direction = args[1].Direction
             if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
                 local targetPart = CachedMagicBulletTargetPart
+                local isMagic = Toggles.MagicBullet and targetPart
                 
-                -- 槍口傳送 (Legacy)
-                if Toggles.MuzzleTP and targetPart then
-                    args[1] = Ray.new(origin, (targetPart.Position - origin).Unit * 1000)
-                    if method == "FindPartOnRayWithIgnoreList" then
-                        local ignoreList = args[2] or {}
-                        for _, obj in pairs(Workspace:GetChildren()) do
-                            if obj:IsA("BasePart") or (obj:IsA("Model") and not Players:GetPlayerFromCharacter(obj)) then
-                                table.insert(ignoreList, obj)
-                            end
-                        end
-                        table.insert(ignoreList, Workspace.Terrain)
-                        args[2] = ignoreList
-                    end
-                    CreateTracer(origin, targetPart.Position)
-                    if setnamecallmethod then setnamecallmethod(method) end
-                    return oldNamecall(self, unpack(args, 1, argCount))
-                end
-                
-                -- 靜默追蹤 (Legacy)
-                if Toggles.MagicBullet and targetPart then
-                    args[1] = Ray.new(origin, (targetPart.Position - origin).Unit * 1000)
+                if isMagic then
+                    direction = (targetPart.Position - origin).Unit * 1000
+                    args[1] = Ray.new(origin, direction)
                     if setnamecallmethod then setnamecallmethod(method) end
                     return oldNamecall(self, unpack(args, 1, argCount))
                 end
@@ -1464,7 +1392,6 @@ CombatTab:CreateToggle("啟用自瞄 (右鍵觸發)", false, function(state) Tog
 CombatTab:CreateToggle("傳統自動開槍 (需對準敵人)", false, function(state) Toggles.TriggerBot = state end)
 CombatTab:CreateToggle("智能自動射擊 (配合靜默)", false, function(state) Toggles.SmartTrigger = state end)
 CombatTab:CreateToggle("啟用靜默追蹤", false, function(state) Toggles.MagicBullet = state end)
-CombatTab:CreateToggle("子彈穿牆", false, function(state) Toggles.MuzzleTP = state end)
 CombatTab:CreateToggle("過濾隊友 (Team Check)", true, function(state) Toggles.TeamCheck = state end)
 CombatTab:CreateToggle("限制鎖定範圍 (FOV)", true, function(state) Settings.AimbotUseFOV = state end)
 CombatTab:CreateToggle("啟用移動預判 (Prediction)", false, function(state) Settings.AimbotPrediction = state end)
@@ -1477,8 +1404,6 @@ CombatTab:CreateDropdown("自瞄部位", {"Auto (AI)", "Head", "HumanoidRootPart
 
 CombatTab:CreateToggle("啟用判定區擴大", false, function(state) Toggles.HitboxExpander = state end)
 CombatTab:CreateSlider("判定區大小", 2, 20, 5, function(val) Settings.HitboxSize = val end)
-CombatTab:CreateToggle("子彈射速調整 (Rapid Fire)", false, function(state) Toggles.RapidFire = state end)
-CombatTab:CreateSlider("射速間隔 (ms)", 10, 200, 50, function(val) Settings.FireRateDelay = val / 1000 end)
 
 
 -- 視覺分頁
