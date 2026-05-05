@@ -1210,71 +1210,54 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- 隱藏武器與換膚系統 (Absolute Priority 覆蓋)
-local GlitchCenter = Instance.new("Part")
-GlitchCenter.Name = "PONY_GlitchCenter"
-GlitchCenter.Transparency = 1
-GlitchCenter.CanCollide = false
-GlitchCenter.Anchored = true
-GlitchCenter.Size = Vector3.new(0.1, 0.1, 0.1)
-
-local GlitchEmitter = Instance.new("ParticleEmitter")
-GlitchEmitter.Name = "PONY_GlitchCloud"
-GlitchEmitter.Texture = "rbxassetid://451336109" -- 數位雜訊貼圖
-GlitchEmitter.Color = ColorSequence.new(Color3.fromRGB(180, 50, 255))
-GlitchEmitter.Size = NumberSequence.new({
-    NumberSequenceKeypoint.new(0, 0.8),
-    NumberSequenceKeypoint.new(0.5, 2),
-    NumberSequenceKeypoint.new(1, 0)
-})
-GlitchEmitter.Rate = 500 -- 密集度
-GlitchEmitter.Lifetime = NumberRange.new(0.1, 0.3)
-GlitchEmitter.Speed = NumberRange.new(0, 1)
-GlitchEmitter.Transparency = NumberSequence.new(0, 1)
-GlitchEmitter.LightEmission = 1 -- 自發光
-GlitchEmitter.ZOffset = 1
-GlitchEmitter.SpreadAngle = Vector2.new(360, 360)
-GlitchEmitter.Enabled = false
-GlitchEmitter.Parent = GlitchCenter
-
-local GlitchLight = Instance.new("PointLight")
-GlitchLight.Color = Color3.fromRGB(180, 50, 255)
-GlitchLight.Range = 10
-GlitchLight.Brightness = 4
-GlitchLight.Enabled = false
-GlitchLight.Parent = GlitchCenter
-
 RunService:BindToRenderStep("PONY_HideWeapon_Ultra", Enum.RenderPriority.Last.Value + 9000, function()
-    local weaponTarget = nil
+    local function ProcessPart(p)
+        local pName = p.Name:lower()
+        local isArm = pName:find("arm") or pName:find("hand") or pName:find("sleeve")
+        
+        if Toggles.HideWeapon and not Toggles.SkinSwapper then
+            -- 純粹隱藏武器
+            p.LocalTransparencyModifier = 1
+        elseif Toggles.SkinSwapper then
+            if isArm then
+                -- 隱藏手臂
+                p.LocalTransparencyModifier = 1
+            else
+                -- 武器本體：轉化為紫色全息力場 (自帶動態雜訊掃描特效)
+                p.LocalTransparencyModifier = 0
+                p.Material = Enum.Material.ForceField
+                p.Color = Color3.fromRGB(180, 50, 255)
+                -- 如果武器有貼圖，強制移除才能顯示 ForceField 效果
+                if p:IsA("MeshPart") then
+                    p.TextureID = ""
+                end
+                for _, child in pairs(p:GetChildren()) do
+                    if child:IsA("Texture") or child:IsA("Decal") or child:IsA("SpecialMesh") then
+                        if child:IsA("SpecialMesh") then
+                            child.TextureId = ""
+                        else
+                            child:Destroy()
+                        end
+                    end
+                end
+            end
+        end
+    end
 
     if Toggles.HideWeapon or Toggles.SkinSwapper then
         -- 1. 處理 Camera 內的所有 ViewModel
         if Workspace.CurrentCamera then
             for _, obj in pairs(Workspace.CurrentCamera:GetDescendants()) do
-                if obj:IsA("BasePart") and obj.Name ~= "PONY_Tracer" and obj.Name ~= "PONYSnowPart" and obj.Name ~= "PONY_GlitchCenter" then 
-                    obj.LocalTransparencyModifier = 1 
-                    
-                    if Toggles.SkinSwapper and not weaponTarget then
-                        local name = obj.Name:lower()
-                        if not name:find("arm") and not name:find("hand") and not name:find("sleeve") then
-                            weaponTarget = obj
-                        end
-                    end
+                if obj:IsA("BasePart") and obj.Name ~= "PONY_Tracer" and obj.Name ~= "PONYSnowPart" then 
+                    ProcessPart(obj)
                 end
             end
         end
         -- 2. 處理玩家角色身上的 Tool
         if LocalPlayer.Character then
             for _, obj in pairs(LocalPlayer.Character:GetDescendants()) do
-                if obj:IsA("BasePart") and obj:FindFirstAncestorOfClass("Tool") and obj.Name ~= "PONY_GlitchCenter" then
-                    obj.LocalTransparencyModifier = 1
-                    
-                    if Toggles.SkinSwapper and not weaponTarget then
-                        local name = obj.Name:lower()
-                        if not name:find("arm") and not name:find("hand") and not name:find("sleeve") then
-                            weaponTarget = obj
-                        end
-                    end
+                if obj:IsA("BasePart") and obj:FindFirstAncestorOfClass("Tool") then
+                    ProcessPart(obj)
                 end
             end
         end
@@ -1285,33 +1268,13 @@ RunService:BindToRenderStep("PONY_HideWeapon_Ultra", Enum.RenderPriority.Last.Va
                 -- 這些是常見的 ViewModel 關鍵字
                 if name:find("view") or name:find("arm") or name:find("weapon") or name:find("gun") or name:find("fp") or name:find("firstperson") then
                     for _, p in pairs(obj:GetDescendants()) do
-                        if p:IsA("BasePart") and p.Name ~= "PONY_Tracer" and p.Name ~= "PONYSnowPart" and p.Name ~= "PONY_GlitchCenter" then 
-                            p.LocalTransparencyModifier = 1 
-                            
-                            if Toggles.SkinSwapper and not weaponTarget then
-                                local pName = p.Name:lower()
-                                if not pName:find("arm") and not pName:find("hand") and not pName:find("sleeve") then
-                                    weaponTarget = p
-                                end
-                            end
+                        if p:IsA("BasePart") and p.Name ~= "PONY_Tracer" and p.Name ~= "PONYSnowPart" then 
+                            ProcessPart(p)
                         end
                     end
                 end
             end
         end
-    end
-
-    -- 統一處理特效位置
-    if Toggles.SkinSwapper and weaponTarget then
-        GlitchCenter.CFrame = weaponTarget.CFrame
-        if GlitchCenter.Parent ~= Workspace.CurrentCamera then
-            GlitchCenter.Parent = Workspace.CurrentCamera
-        end
-        GlitchEmitter.Enabled = true
-        GlitchLight.Enabled = true
-    else
-        GlitchEmitter.Enabled = false
-        GlitchLight.Enabled = false
     end
 end)
 
