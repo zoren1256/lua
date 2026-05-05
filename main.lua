@@ -1219,13 +1219,18 @@ RunService:BindToRenderStep("ZRN_HideWeapon_Ultra", Enum.RenderPriority.Last.Val
                 end
             end
         end
-        -- 3. 掃描 Workspace 直屬的最上層模型
+        -- 3. 安全掃描 Workspace 直屬的最上層模型 (限制大小避免卡頓)
         for _, obj in pairs(Workspace:GetChildren()) do
             if obj:IsA("Model") and obj ~= LocalPlayer.Character then
-                local name = obj.Name:lower()
-                if name:find("view") or name:find("arm") or name:find("weapon") or name:find("gun") or name:find("fp") or name:find("firstperson") or name:find("client") then
-                    for _, p in pairs(obj:GetDescendants()) do
-                        if p:IsA("BasePart") and p.Name ~= "ZRN_Tracer" then p.LocalTransparencyModifier = 1 end
+                -- 如果這個模型是地圖或超大物件，直接跳過 (避免卡死)
+                if #obj:GetChildren() < 50 then
+                    local name = obj.Name:lower()
+                    if name:find("view") or name:find("arm") or name:find("weapon") or name:find("gun") or name:find("fp") or name:find("firstperson") then
+                        for _, p in pairs(obj:GetDescendants()) do
+                            if p:IsA("BasePart") and p.Name ~= "ZRN_Tracer" then 
+                                p.LocalTransparencyModifier = 1 
+                            end
+                        end
                     end
                 end
             end
@@ -1335,47 +1340,61 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
     end
 
     if IsShooting and not checkcaller() then
-        if self == Workspace and method == "Raycast" then
+        if self == Workspace then
             local argCount = select("#", ...)
             local args = {...}
-            local origin = args[1]
-            local direction = args[2]
-            -- 放寬長度限制以涵蓋弓箭的短程拋物線射線 (排除小於 10 的腳步或相機檢測)
-            if typeof(direction) == "Vector3" and direction.Magnitude > 10 then
-                local targetPart = CachedMagicBulletTargetPart
-                local isMagic = Toggles.MagicBullet and targetPart
-                
-                if isMagic then
-                    -- 保持原本射線長度，避免破壞飛行物的計算，但強制轉向敵人
-                    direction = (targetPart.Position - origin).Unit * math.max(direction.Magnitude, 1000)
-                    args[2] = direction
-                    if setnamecallmethod then setnamecallmethod(method) end
-                    return oldNamecall(self, unpack(args, 1, argCount))
-                end
-                
-                -- Tracer 畫線 (只在射擊起點畫，避免畫出密集的拋物線短線)
-                if direction.Magnitude > 100 then
-                    CreateTracer(origin, origin + (direction.Unit * 250))
-                end
+            
+            local origin, direction, argDirIndex
+            local isRaycast = false
+            
+            if method == "Raycast" then
+                origin = args[1]
+                direction = args[2]
+                argDirIndex = 2
+                isRaycast = true
+            elseif method == "Spherecast" or method == "Blockcast" then
+                origin = (method == "Blockcast") and args[1].Position or args[1]
+                direction = args[3]
+                argDirIndex = 3
+                isRaycast = true
             end
-        elseif self == Workspace and (method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay") then
-            local argCount = select("#", ...)
-            local args = {...}
-            local origin = args[1].Origin
-            local direction = args[1].Direction
-            if typeof(direction) == "Vector3" and direction.Magnitude > 10 then
-                local targetPart = CachedMagicBulletTargetPart
-                local isMagic = Toggles.MagicBullet and targetPart
+            
+            if isRaycast and origin and direction and typeof(direction) == "Vector3" then
+                -- 排除探測腳底的射線 (垂直朝下且極短)，其他全攔截
+                local isFootCheck = direction.Magnitude < 15 and direction.Unit.Y <= -0.9
                 
-                if isMagic then
-                    direction = (targetPart.Position - origin).Unit * math.max(direction.Magnitude, 1000)
-                    args[1] = Ray.new(origin, direction)
-                    if setnamecallmethod then setnamecallmethod(method) end
-                    return oldNamecall(self, unpack(args, 1, argCount))
+                if not isFootCheck then
+                    local targetPart = CachedMagicBulletTargetPart
+                    if Toggles.MagicBullet and targetPart then
+                        -- 強制轉向敵人並賦予極大長度以確保命中
+                        direction = (targetPart.Position - origin).Unit * math.max(direction.Magnitude, 1500)
+                        args[argDirIndex] = direction
+                        if setnamecallmethod then setnamecallmethod(method) end
+                        return oldNamecall(self, unpack(args, 1, argCount))
+                    end
+                    
+                    if direction.Magnitude > 50 then
+                        CreateTracer(origin, origin + (direction.Unit * 250))
+                    end
                 end
+            elseif method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay" then
+                local originRay = args[1].Origin
+                local directionRay = args[1].Direction
                 
-                if direction.Magnitude > 100 then
-                    CreateTracer(origin, origin + (direction.Unit * 250))
+                local isFootCheck = directionRay.Magnitude < 15 and directionRay.Unit.Y <= -0.9
+                
+                if not isFootCheck then
+                    local targetPart = CachedMagicBulletTargetPart
+                    if Toggles.MagicBullet and targetPart then
+                        directionRay = (targetPart.Position - originRay).Unit * math.max(directionRay.Magnitude, 1500)
+                        args[1] = Ray.new(originRay, directionRay)
+                        if setnamecallmethod then setnamecallmethod(method) end
+                        return oldNamecall(self, unpack(args, 1, argCount))
+                    end
+                    
+                    if directionRay.Magnitude > 50 then
+                        CreateTracer(originRay, originRay + (directionRay.Unit * 250))
+                    end
                 end
             end
         end
