@@ -1128,7 +1128,7 @@ end)
 
 local wasWeaponHidden = false
 -- 隱藏第一人稱武器與手臂 (強制覆蓋遊戲渲染)
-RunService:BindToRenderStep("ZRN_HideWeapon", Enum.RenderPriority.Camera.Value + 20, function()
+RunService:BindToRenderStep("ZRN_HideWeapon", Enum.RenderPriority.Last.Value + 10, function()
     if Toggles.HideWeapon then
         wasWeaponHidden = true
         local Camera = Workspace.CurrentCamera
@@ -1136,8 +1136,6 @@ RunService:BindToRenderStep("ZRN_HideWeapon", Enum.RenderPriority.Camera.Value +
             for _, obj in pairs(Camera:GetDescendants()) do
                 if obj:IsA("BasePart") then 
                     obj.LocalTransparencyModifier = 1 
-                elseif obj:IsA("Decal") or obj:IsA("Texture") then
-                    obj.Transparency = 1
                 end
             end
         end
@@ -1157,8 +1155,6 @@ RunService:BindToRenderStep("ZRN_HideWeapon", Enum.RenderPriority.Camera.Value +
             for _, obj in pairs(Camera:GetDescendants()) do
                 if obj:IsA("BasePart") then 
                     obj.LocalTransparencyModifier = 0 
-                elseif obj:IsA("Decal") or obj:IsA("Texture") then
-                    obj.Transparency = 0
                 end
             end
         end
@@ -1221,13 +1217,25 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
     if method == "Play" and typeof(self) == "Instance" and self.ClassName == "Sound" and not checkcaller() then
         if Toggles.CustomGunSound then
             local soundName = self.Name:lower()
-            -- 檢查是否為槍聲
-            if soundName:find("fire") or soundName:find("shoot") or soundName:find("shot") or soundName:find("gun") or soundName:find("bang") then
-                -- 確保只改自己的槍聲
+            -- 排除換彈或裝備的聲音
+            local isReload = soundName:find("reload") or soundName:find("mag") or soundName:find("clip") or soundName:find("equip") or soundName:find("pull")
+            
+            if not isReload then
+                -- 判斷是否為武器發出的聲音 (存在於 Camera 內的 ViewModel 或玩家手上的 Tool)
                 local inCamera = Workspace.CurrentCamera and checkDescendant(self, Workspace.CurrentCamera)
-                local inChar = LocalPlayer.Character and checkDescendant(self, LocalPlayer.Character)
-                if inCamera or inChar then
-                    -- 播放自己的獨立聲音，不要修改原始物件，避免觸發遊戲的反作弊或報錯
+                local inTool = false
+                if LocalPlayer.Character then
+                    local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
+                    if tool and checkDescendant(self, tool) then
+                        inTool = true
+                    end
+                end
+                
+                -- 如果是武器聲音，或者是明確的開槍聲音
+                local isGunName = soundName:find("fire") or soundName:find("shoot") or soundName:find("shot") or soundName:find("gun") or soundName:find("bang")
+                
+                if (inCamera or inTool or isGunName) then
+                    -- 播放自己的獨立聲音
                     task.spawn(function()
                         local customSound = Instance.new("Sound")
                         customSound.SoundId = Settings.CustomGunSoundID
