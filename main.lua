@@ -1360,30 +1360,22 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
             end
             
             if isRaycast and origin and direction and typeof(direction) == "Vector3" then
-                -- 排除探測腳底的射線 (垂直朝下且極短)，其他全攔截
-                local isFootCheck = direction.Magnitude < 15 and direction.Unit.Y <= -0.9
-                
-                if not isFootCheck then
+                -- 恢復 100 的限制：因為太短的射線會影響人物移動跟視角，導致「開槍會飛起來」的 BUG
+                if direction.Magnitude > 100 then
                     local targetPart = CachedMagicBulletTargetPart
                     if Toggles.MagicBullet and targetPart then
-                        -- 強制轉向敵人並賦予極大長度以確保命中
                         direction = (targetPart.Position - origin).Unit * math.max(direction.Magnitude, 1500)
                         args[argDirIndex] = direction
                         if setnamecallmethod then setnamecallmethod(method) end
                         return oldNamecall(self, unpack(args, 1, argCount))
                     end
-                    
-                    if direction.Magnitude > 50 then
-                        CreateTracer(origin, origin + (direction.Unit * 250))
-                    end
+                    CreateTracer(origin, origin + (direction.Unit * 250))
                 end
             elseif method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay" then
                 local originRay = args[1].Origin
                 local directionRay = args[1].Direction
                 
-                local isFootCheck = directionRay.Magnitude < 15 and directionRay.Unit.Y <= -0.9
-                
-                if not isFootCheck then
+                if directionRay.Magnitude > 100 then
                     local targetPart = CachedMagicBulletTargetPart
                     if Toggles.MagicBullet and targetPart then
                         directionRay = (targetPart.Position - originRay).Unit * math.max(directionRay.Magnitude, 1500)
@@ -1391,17 +1383,38 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
                         if setnamecallmethod then setnamecallmethod(method) end
                         return oldNamecall(self, unpack(args, 1, argCount))
                     end
-                    
-                    if directionRay.Magnitude > 50 then
-                        CreateTracer(originRay, originRay + (directionRay.Unit * 250))
-                    end
+                    CreateTracer(originRay, originRay + (directionRay.Unit * 250))
                 end
+            end
+        elseif self == Workspace.CurrentCamera and (method == "ScreenPointToRay" or method == "ViewportPointToRay") then
+            -- 攔截由相機發出的準心射線 (弓箭等飛行物多半依賴這個來決定初始方向)
+            local targetPart = CachedMagicBulletTargetPart
+            if Toggles.MagicBullet and targetPart then
+                local origin = self.CFrame.Position
+                local direction = (targetPart.Position - origin).Unit
+                if setnamecallmethod then setnamecallmethod(method) end
+                return Ray.new(origin, direction)
             end
         end
     end
 
     if setnamecallmethod then setnamecallmethod(method) end
     return oldNamecall(self, ...)
+end))
+
+-- 攔截滑鼠點擊位置 (弓箭/投擲物專用)
+local oldIndex
+oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, idx)
+    if not checkcaller() and Toggles.MagicBullet and IsShooting and CachedMagicBulletTargetPart then
+        if typeof(self) == "Instance" and self:IsA("Mouse") then
+            if idx == "Hit" then
+                return CachedMagicBulletTargetPart.CFrame
+            elseif idx == "Target" then
+                return CachedMagicBulletTargetPart
+            end
+        end
+    end
+    return oldIndex(self, idx)
 end))
 
 --------------------------------------------------------------------------------
