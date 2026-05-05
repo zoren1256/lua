@@ -41,6 +41,7 @@ local Toggles = {
     CustomGunSound = false,
     SilentGun = true,
     SkinSwapper = true,
+    AntiHeadshot = false,
     TeamCheck = true
 }
 
@@ -1520,6 +1521,10 @@ CharacterTab:CreateToggle("飛行模式 (Fly)", false, function(state)
     flying = state
 end)
 
+CharacterTab:CreateToggle("躲避模式：藏頭 (Anti-Headshot)", false, function(state)
+    Toggles.AntiHeadshot = state
+end)
+
 -- 飛行與穿牆邏輯
 RunService.RenderStepped:Connect(function()
     if not LocalPlayer.Character then return end
@@ -1648,6 +1653,27 @@ RunService.Stepped:Connect(function()
             if rElbow then rElbow.Transform = CFrame.Angles(math.rad(60), 0, 0) end
             if lElbow then lElbow.Transform = CFrame.Angles(math.rad(60), 0, 0) end
             if waist then waist.Transform = CFrame.Angles(math.rad(-10), 0, 0) end
+        end
+    end
+    
+    -- 藏頭邏輯 (Anti-Headshot)
+    if Toggles.AntiHeadshot then
+        local char = LocalPlayer.Character
+        if char then
+            local isR15 = char:FindFirstChild("UpperTorso") ~= nil
+            if isR15 then
+                local neck = char.UpperTorso:FindFirstChild("Neck")
+                if neck then
+                    -- 強行向下旋轉 180 度 (把頭塞進肚子)
+                    neck.Transform = CFrame.Angles(math.rad(-180), 0, 0)
+                end
+            else
+                -- R6 版本
+                local neck = char:FindFirstChild("Torso") and char.Torso:FindFirstChild("Neck")
+                if neck then
+                    neck.Transform = CFrame.Angles(math.rad(-180), 0, 0)
+                end
+            end
         end
     end
 end)
