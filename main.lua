@@ -37,7 +37,8 @@ local Toggles = {
     CustomMovement = false,
     SmartTrigger = false,
     HideWeapon = false,
-    CustomGunSound = true
+    CustomGunSound = true,
+    TeamCheck = true
 }
 
 local Settings = {
@@ -53,7 +54,7 @@ local Settings = {
     SpinSpeed = 50,
     WalkSpeed = 16,
     JumpPower = 50,
-    CustomGunSoundID = "rbxassetid://8055530182"
+    CustomGunSoundID = "rbxassetid://160432334"
 }
 
 --------------------------------------------------------------------------------
@@ -799,6 +800,77 @@ local function getSmartTargetPart(character)
     return character:FindFirstChild(Settings.AimbotTarget ~= "Auto (AI)" and Settings.AimbotTarget or "HumanoidRootPart")
 end
 
+-- 隊友判定 (高階多重過濾系統)
+local function isEnemy(player)
+    if player == LocalPlayer then return false end
+    if not Toggles.TeamCheck then return true end
+    
+    -- 1. 基礎 Team 屬性
+    if LocalPlayer.Team ~= nil and player.Team ~= nil then
+        if LocalPlayer.Team == player.Team then return false end
+    end
+    
+    -- 2. 基礎 TeamColor 屬性
+    if LocalPlayer.TeamColor ~= nil and player.TeamColor ~= nil then
+        if LocalPlayer.TeamColor == player.TeamColor then return false end
+    end
+    
+    -- 3. Player Attributes 檢查 (Rivals 等現代遊戲愛用)
+    for _, attrName in pairs({"Team", "team", "TeamName", "Squad", "Group"}) do
+        local lpAttr = LocalPlayer:GetAttribute(attrName)
+        local pAttr = player:GetAttribute(attrName)
+        if lpAttr ~= nil and pAttr ~= nil then
+            if lpAttr == pAttr then return false end
+        end
+    end
+    
+    -- 4. Character Attributes 檢查
+    if LocalPlayer.Character and player.Character then
+        for _, attrName in pairs({"Team", "team", "TeamName", "Squad"}) do
+            local lpAttr = LocalPlayer.Character:GetAttribute(attrName)
+            local pAttr = player.Character:GetAttribute(attrName)
+            if lpAttr ~= nil and pAttr ~= nil then
+                if lpAttr == pAttr then return false end
+            end
+        end
+    end
+    
+    -- 5. 自訂 Team Value 檢查 (通常在 Player 或 leaderstats 裡面)
+    local function checkValueBase(parent)
+        if not parent then return nil end
+        for _, child in pairs(parent:GetChildren()) do
+            if (child.Name:lower() == "team" or child.Name:lower() == "teamname") and child:IsA("ValueBase") then
+                return child.Value
+            end
+        end
+        return nil
+    end
+    
+    local lpVal = checkValueBase(LocalPlayer) or checkValueBase(LocalPlayer:FindFirstChild("leaderstats"))
+    local pVal = checkValueBase(player) or checkValueBase(player:FindFirstChild("leaderstats"))
+    
+    if lpVal ~= nil and pVal ~= nil then
+        if lpVal == pVal then return false end
+    end
+
+    -- 預設當作敵人
+    return true
+end
+
+-- 偵測是否拿著武士刀 (Anti-Katana)
+local function isHoldingKatana(character)
+    if not character then return false end
+    for _, obj in pairs(character:GetChildren()) do
+        if obj:IsA("Tool") or obj:IsA("Model") then
+            local name = obj.Name:lower()
+            if name:find("katana") or name:find("sword") or name:find("blade") then
+                return true
+            end
+        end
+    end
+    return false
+end
+
 -- 取得最近的目標
 local function getClosestPlayer()
     local Camera = Workspace.CurrentCamera
@@ -808,7 +880,7 @@ local function getClosestPlayer()
     if Settings.AimbotUseFOV then
         local shortestDistance = Settings.AimbotFOV
         for _, player in pairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
+            if isEnemy(player) and player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
                 local targetPart = getSmartTargetPart(player.Character)
                 if targetPart then
                     -- 改用 WorldToScreenPoint 與 GetMouseLocation 確保完全對準準心，避免 Viewport 偏差
@@ -830,7 +902,7 @@ local function getClosestPlayer()
         local lpRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if lpRoot then
             for _, player in pairs(Players:GetPlayers()) do
-                if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
+                if isEnemy(player) and player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
                     local targetPart = getSmartTargetPart(player.Character)
                     if targetPart then
                         local distance = (targetPart.Position - lpRoot.Position).Magnitude
@@ -928,7 +1000,7 @@ local function createESP(player)
         local conn
         conn = RunService.RenderStepped:Connect(function()
             pcall(function()
-                if not character.Parent or hum.Health <= 0 then
+                if not character.Parent or hum.Health <= 0 or not isEnemy(player) then
                     conn:Disconnect()
                     if espFolder and espFolder.Parent then espFolder:Destroy() end
                     return
@@ -1079,7 +1151,7 @@ RunService.RenderStepped:Connect(function()
         if Toggles.SmartTrigger then
             -- 智能開火：無須對準，只要敵人在 FOV 內且有身體部位露出就開火 (配合靜默追蹤)
             local targetPart = CachedMagicBulletTargetPart
-            if targetPart then
+            if targetPart and targetPart.Parent and not isHoldingKatana(targetPart.Parent) then
                 local origin = Camera.CFrame.Position
                 local result = Workspace:Raycast(origin, targetPart.Position - origin, raycastParams)
                 if not result or (result.Instance and result.Instance:IsDescendantOf(targetPart.Parent)) then
@@ -1094,8 +1166,11 @@ RunService.RenderStepped:Connect(function()
             local result = Workspace:Raycast(ray.Origin, ray.Direction * 1000, raycastParams)
             if result and result.Instance then
                 local model = result.Instance:FindFirstAncestorOfClass("Model")
-                if model and model:FindFirstChild("Humanoid") and Players:GetPlayerFromCharacter(model) then
-                    shouldShoot = true
+                if model and model:FindFirstChild("Humanoid") then
+                    local targetPlayer = Players:GetPlayerFromCharacter(model)
+                    if targetPlayer and isEnemy(targetPlayer) and not isHoldingKatana(model) then
+                        shouldShoot = true
+                    end
                 end
             end
         end
@@ -1106,37 +1181,13 @@ RunService.RenderStepped:Connect(function()
         end
     end
     
-end)
-
--- 第三人稱視角 (Third Person) 強制覆蓋遊戲相機腳本
-RunService:BindToRenderStep("ZRN_ThirdPerson", Enum.RenderPriority.Camera.Value + 10, function()
-    if Toggles.ThirdPerson and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head") then
-        local Camera = Workspace.CurrentCamera
-        if Camera then
-            -- 將相機強制往後拉，創造第三人稱視角 (無死角覆蓋)
-            Camera.CFrame = Camera.CFrame * CFrame.new(0, 1.5, Settings.ThirdPersonDist or 10)
-        end
-        
-        -- 強制顯示自己的身體 (解決第一人稱會隱藏身體的問題)
-        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
-            if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-                part.LocalTransparencyModifier = 0
-            end
-        end
-    end
-end)
-
-local wasWeaponHidden = false
--- 隱藏第一人稱武器與手臂 (強制覆蓋遊戲渲染)
-RunService:BindToRenderStep("ZRN_HideWeapon", Enum.RenderPriority.Last.Value + 10, function()
+    -- 隱藏武器 (回歸最穩定的 RenderStepped 迴圈)
     if Toggles.HideWeapon then
         wasWeaponHidden = true
         local Camera = Workspace.CurrentCamera
         if Camera then
             for _, obj in pairs(Camera:GetDescendants()) do
-                if obj:IsA("BasePart") then 
-                    obj.LocalTransparencyModifier = 1 
-                end
+                if obj:IsA("BasePart") then obj.LocalTransparencyModifier = 1 end
             end
         end
         if LocalPlayer.Character then
@@ -1153,9 +1204,7 @@ RunService:BindToRenderStep("ZRN_HideWeapon", Enum.RenderPriority.Last.Value + 1
         local Camera = Workspace.CurrentCamera
         if Camera then
             for _, obj in pairs(Camera:GetDescendants()) do
-                if obj:IsA("BasePart") then 
-                    obj.LocalTransparencyModifier = 0 
-                end
+                if obj:IsA("BasePart") then obj.LocalTransparencyModifier = 0 end
             end
         end
         if LocalPlayer.Character then
@@ -1165,6 +1214,24 @@ RunService:BindToRenderStep("ZRN_HideWeapon", Enum.RenderPriority.Last.Value + 1
                         if part:IsA("BasePart") then part.LocalTransparencyModifier = 0 end
                     end
                 end
+            end
+        end
+    end
+end)
+
+-- 第三人稱視角 (Third Person) 強制覆蓋遊戲相機腳本
+RunService:BindToRenderStep("ZRN_ThirdPerson", Enum.RenderPriority.Camera.Value + 10, function()
+    if Toggles.ThirdPerson and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head") then
+        local Camera = Workspace.CurrentCamera
+        if Camera then
+            -- 將相機強制往後拉，創造第三人稱視角 (無死角覆蓋)
+            Camera.CFrame = Camera.CFrame * CFrame.new(0, 1.5, Settings.ThirdPersonDist or 10)
+        end
+        
+        -- 強制顯示自己的身體 (解決第一人稱會隱藏身體的問題)
+        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                part.LocalTransparencyModifier = 0
             end
         end
     end
@@ -1212,36 +1279,42 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
         return false
     end
 
-    if method == "Play" and typeof(self) == "Instance" and self.ClassName == "Sound" and not checkcaller() then
-        if Toggles.CustomGunSound then
-            local soundName = self.Name:lower()
-            -- 排除換彈或裝備的聲音
-            local isReload = soundName:find("reload") or soundName:find("mag") or soundName:find("clip") or soundName:find("equip") or soundName:find("pull")
-            
-            if not isReload then
-                -- 判斷是否為武器發出的聲音 (存在於 Camera 內的 ViewModel 或玩家手上的 Tool)
-                local inCamera = Workspace.CurrentCamera and checkDescendant(self, Workspace.CurrentCamera)
-                local inTool = false
-                if LocalPlayer.Character then
-                    local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
-                    if tool and checkDescendant(self, tool) then
-                        inTool = true
-                    end
-                end
+    if (method == "Play" or method == "PlayLocalSound") and not checkcaller() then
+        local soundObj = self
+        if method == "PlayLocalSound" then
+            soundObj = select(1, ...)
+        end
+        
+        if typeof(soundObj) == "Instance" and soundObj.ClassName == "Sound" then
+            if Toggles.CustomGunSound then
+                local soundName = soundObj.Name:lower()
+                -- 排除腳步聲、換彈等非槍聲
+                local isIgnored = soundName:find("reload") or soundName:find("mag") or soundName:find("clip") or soundName:find("equip") or soundName:find("pull") or soundName:find("step") or soundName:find("walk") or soundName:find("run") or soundName:find("foot")
                 
-                if inCamera or inTool then
-                    -- 播放自己的獨立聲音
-                    task.spawn(function()
-                        local customSound = Instance.new("Sound")
-                        customSound.SoundId = Settings.CustomGunSoundID
-                        customSound.Volume = 2
-                        customSound.Parent = Workspace
-                        customSound:Play()
-                        task.wait(2)
-                        customSound:Destroy()
-                    end)
-                    -- 直接攔截原始聲音的播放
-                    return
+                if not isIgnored then
+                    local inCamera = Workspace.CurrentCamera and checkDescendant(soundObj, Workspace.CurrentCamera)
+                    local inTool = false
+                    if LocalPlayer.Character then
+                        local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
+                        if tool and checkDescendant(soundObj, tool) then
+                            inTool = true
+                        end
+                    end
+                    
+                    -- 如果聲音在武器裡、或者剛好玩家正在開槍 (IsShooting) 且聲音沒有被排除
+                    if inCamera or inTool or IsShooting then
+                        task.spawn(function()
+                            local customSound = Instance.new("Sound")
+                            customSound.SoundId = Settings.CustomGunSoundID
+                            customSound.Volume = 2
+                            customSound.Parent = Workspace
+                            customSound:Play()
+                            task.wait(2)
+                            customSound:Destroy()
+                        end)
+                        if setnamecallmethod then setnamecallmethod(method) end
+                        return
+                    end
                 end
             end
         end
@@ -1260,6 +1333,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
                 if isMagic then
                     direction = (targetPart.Position - origin).Unit * 1000
                     args[2] = direction
+                    if setnamecallmethod then setnamecallmethod(method) end
                     return oldNamecall(self, unpack(args, 1, argCount))
                 end
                 
@@ -1277,6 +1351,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
                 if isMagic then
                     direction = (targetPart.Position - origin).Unit * 1000
                     args[1] = Ray.new(origin, direction)
+                    if setnamecallmethod then setnamecallmethod(method) end
                     return oldNamecall(self, unpack(args, 1, argCount))
                 end
                 
@@ -1285,6 +1360,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
         end
     end
 
+    if setnamecallmethod then setnamecallmethod(method) end
     return oldNamecall(self, ...)
 end))
 
@@ -1304,6 +1380,7 @@ CombatTab:CreateToggle("啟用自瞄 (右鍵觸發)", false, function(state) Tog
 CombatTab:CreateToggle("傳統自動開槍 (需對準敵人)", false, function(state) Toggles.TriggerBot = state end)
 CombatTab:CreateToggle("智能自動射擊 (配合靜默)", false, function(state) Toggles.SmartTrigger = state end)
 CombatTab:CreateToggle("啟用靜默追蹤", false, function(state) Toggles.MagicBullet = state end)
+CombatTab:CreateToggle("過濾隊友 (Team Check)", true, function(state) Toggles.TeamCheck = state end)
 CombatTab:CreateToggle("限制鎖定範圍 (FOV)", true, function(state) Settings.AimbotUseFOV = state end)
 CombatTab:CreateToggle("啟用移動預判 (Prediction)", false, function(state) Settings.AimbotPrediction = state end)
 CombatTab:CreateSlider("預判強度 (數字越大越往前)", 0, 20, 5, function(val) Settings.PredictionAmount = val / 100 end)
