@@ -1212,28 +1212,22 @@ end)
 
 -- 隱藏武器與換膚系統 (Absolute Priority 覆蓋)
 local function ApplyGlitchEffect(part)
-    if not part:FindFirstChild("PONY_GlitchCloud") then
-        local emitter = Instance.new("ParticleEmitter")
-        emitter.Name = "PONY_GlitchCloud"
-        emitter.Texture = "rbxassetid://451336109"
-        emitter.Color = ColorSequence.new(Color3.fromRGB(180, 50, 255))
-        emitter.Size = NumberSequence.new({
-            NumberSequenceKeypoint.new(0, 1.5),
-            NumberSequenceKeypoint.new(0.5, 3),
-            NumberSequenceKeypoint.new(1, 0)
-        })
-        emitter.Rate = 500
-        emitter.Lifetime = NumberRange.new(0.1, 0.3)
-        emitter.Transparency = NumberSequence.new(0, 1)
-        emitter.LightEmission = 1
-        emitter.ZOffset = 1
-        emitter.Enabled = true
-        emitter.Parent = part
+    if not part:FindFirstChild("PONY_HoloSkin") then
+        local adornment = Instance.new("BoxHandleAdornment")
+        adornment.Name = "PONY_HoloSkin"
+        adornment.Adornee = part
+        adornment.Size = part.Size + Vector3.new(0.05, 0.05, 0.05) -- 稍微比原零件大一點點，完全包覆
+        adornment.Color3 = Color3.fromRGB(180, 50, 255) -- 螢光紫
+        adornment.Transparency = 0.4 -- 半透明全息質感
+        adornment.ZIndex = 10 -- 確保渲染在最外層
+        adornment.AlwaysOnTop = true -- 無視遮擋
+        adornment.Parent = part
         
+        -- 保留發光效果
         local light = Instance.new("PointLight")
         light.Color = Color3.fromRGB(180, 50, 255)
-        light.Range = 15
-        light.Brightness = 8
+        light.Range = 8
+        light.Brightness = 3
         light.Parent = part
     end
 end
