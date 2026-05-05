@@ -56,7 +56,7 @@ local Settings = {
     SpinSpeed = 50,
     WalkSpeed = 16,
     JumpPower = 50,
-    CustomGunSoundID = "rbxassetid://160432334",
+    CustomGunSoundID = "rbxassetid://413861139", -- 清脆的鈴鐺叮叮聲 (原本是超吵的槍聲),
     FireRateDelay = 0.05 -- 射速間隔 (秒)，數字越小越快
 }
 
@@ -1303,23 +1303,16 @@ local function CreateTracer(origin, endPoint)
     end)
 end
 
-local oldNamecall
-oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
-    local method = getnamecallmethod()
-
-    -- 自訂檢查父節點函數，避免使用 :IsDescendantOf 污染 namecall method
-    local function checkDescendant(obj, target)
-        if not obj or not target then return false end
-        local current = obj
-        while current do
-            if current == target then return true end
-            current = current.Parent
-        end
-        return false
+-- 自訂檢查父節點函數，放在全局避免重複宣告
+local function checkDescendant(obj, target)
+    if not obj or not target then return false end
+    local current = obj
+    while current do
+        if current == target then return true end
+        current = current.Parent
     end
-
-    return oldNamecall(self, ...)
-end))
+    return false
+end
 
 -- 槍口位置欺騙 (Muzzle Spoofing) - 真正的穿牆原理
 local oldIndex
@@ -1331,7 +1324,6 @@ oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, prop)
                 local targetPart = CachedMagicBulletTargetPart
                 if targetPart then
                     -- 騙過遊戲腳本，讓它以為槍口就在敵人前面 3 studs 的空中
-                    -- 這樣發射出的射線起點就會直接跳過牆壁
                     return targetPart.Position + (Camera.CFrame.Position - targetPart.Position).Unit * 3
                 end
             end
@@ -1340,20 +1332,20 @@ oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, prop)
     return oldIndex(self, prop)
 end))
 
-local oldNamecallInternal
-oldNamecallInternal = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+local oldNamecall
+oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
     local method = getnamecallmethod()
+    local argCount = select("#", ...)
+    local args = {...}
 
+    -- 1. 槍聲替換邏輯
     if (method == "Play" or method == "PlayLocalSound") and not checkcaller() then
         local soundObj = self
-        if method == "PlayLocalSound" then
-            soundObj = select(1, ...)
-        end
+        if method == "PlayLocalSound" then soundObj = args[1] end
         
         if typeof(soundObj) == "Instance" and soundObj.ClassName == "Sound" then
             if Toggles.CustomGunSound then
                 local soundName = soundObj.Name:lower()
-                -- 排除腳步聲、換彈等非槍聲
                 local isIgnored = soundName:find("reload") or soundName:find("mag") or soundName:find("clip") or soundName:find("equip") or soundName:find("pull") or soundName:find("step") or soundName:find("walk") or soundName:find("run") or soundName:find("foot")
                 
                 if not isIgnored then
@@ -1361,17 +1353,14 @@ oldNamecallInternal = hookmetamethod(game, "__namecall", newcclosure(function(se
                     local inTool = false
                     if LocalPlayer.Character then
                         local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
-                        if tool and checkDescendant(soundObj, tool) then
-                            inTool = true
-                        end
+                        if tool and checkDescendant(soundObj, tool) then inTool = true end
                     end
                     
-                    -- 如果聲音在武器裡、或者剛好玩家正在開槍 (IsShooting) 且聲音沒有被排除
                     if inCamera or inTool or IsShooting then
                         task.spawn(function()
                             local customSound = Instance.new("Sound")
                             customSound.SoundId = Settings.CustomGunSoundID
-                            customSound.Volume = 2
+                            customSound.Volume = 0.8 -- 調低音量，避免連射太吵
                             customSound.Parent = Workspace
                             customSound:Play()
                             task.wait(2)
@@ -1385,40 +1374,34 @@ oldNamecallInternal = hookmetamethod(game, "__namecall", newcclosure(function(se
         end
     end
 
+    -- 2. 戰鬥邏輯 (Raycast / MuzzleTP / MagicBullet)
     if IsShooting and not checkcaller() then
         if self == Workspace and method == "Raycast" then
-            local argCount = select("#", ...)
-            local args = {...}
             local origin = args[1]
             local direction = args[2]
             if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
                 local targetPart = CachedMagicBulletTargetPart
                 
-                -- 槍口傳送 (Muzzle TP)：讓子彈無視牆壁，直接穿透擊中敵人
-                -- 除了替換 Params，我們還要確保方向正確
+                -- 槍口傳送 (Muzzle TP)
                 if Toggles.MuzzleTP and targetPart then
                     local wallIgnoreParams = RaycastParams.new()
                     wallIgnoreParams.FilterType = Enum.RaycastFilterType.Include
                     local charList = {}
                     for _, p in pairs(Players:GetPlayers()) do
-                        if p ~= LocalPlayer and p.Character then
-                            table.insert(charList, p.Character)
-                        end
+                        if p ~= LocalPlayer and p.Character then table.insert(charList, p.Character) end
                     end
                     wallIgnoreParams.FilterDescendantsInstances = charList
                     
-                    local newDirection = (targetPart.Position - origin).Unit * 1000
-                    args[2] = newDirection
+                    args[2] = (targetPart.Position - origin).Unit * 1000
                     args[3] = wallIgnoreParams
                     CreateTracer(origin, targetPart.Position)
                     if setnamecallmethod then setnamecallmethod(method) end
-                    return oldNamecallInternal(self, unpack(args, 1, math.max(argCount, 3)))
+                    return oldNamecall(self, unpack(args, 1, math.max(argCount, 3)))
                 end
                 
-                -- 靜默追蹤 (Magic Bullet)：子彈從你的槍口射出，但方向轉向敵人
+                -- 靜默追蹤 (Magic Bullet)
                 if Toggles.MagicBullet and targetPart then
-                    direction = (targetPart.Position - origin).Unit * 1000
-                    args[2] = direction
+                    args[2] = (targetPart.Position - origin).Unit * 1000
                     if setnamecallmethod then setnamecallmethod(method) end
                     return oldNamecall(self, unpack(args, 1, argCount))
                 end
@@ -1426,18 +1409,14 @@ oldNamecallInternal = hookmetamethod(game, "__namecall", newcclosure(function(se
                 CreateTracer(origin, origin + (direction.Unit * 250))
             end
         elseif self == Workspace and (method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay") then
-            local argCount = select("#", ...)
-            local args = {...}
             local origin = args[1].Origin
             local direction = args[1].Direction
             if typeof(direction) == "Vector3" and direction.Magnitude > 100 then
                 local targetPart = CachedMagicBulletTargetPart
                 
-                -- 槍口傳送 (Legacy Ray API) - 改用 IgnoreList 方式穿牆
+                -- 槍口傳送 (Legacy)
                 if Toggles.MuzzleTP and targetPart then
-                    local newDirection = (targetPart.Position - origin).Unit * 1000
-                    args[1] = Ray.new(origin, newDirection)
-                    -- 把所有非角色的物件加入忽略清單
+                    args[1] = Ray.new(origin, (targetPart.Position - origin).Unit * 1000)
                     if method == "FindPartOnRayWithIgnoreList" then
                         local ignoreList = args[2] or {}
                         for _, obj in pairs(Workspace:GetChildren()) do
@@ -1453,10 +1432,9 @@ oldNamecallInternal = hookmetamethod(game, "__namecall", newcclosure(function(se
                     return oldNamecall(self, unpack(args, 1, argCount))
                 end
                 
-                -- 靜默追蹤 (Legacy Ray API)
+                -- 靜默追蹤 (Legacy)
                 if Toggles.MagicBullet and targetPart then
-                    direction = (targetPart.Position - origin).Unit * 1000
-                    args[1] = Ray.new(origin, direction)
+                    args[1] = Ray.new(origin, (targetPart.Position - origin).Unit * 1000)
                     if setnamecallmethod then setnamecallmethod(method) end
                     return oldNamecall(self, unpack(args, 1, argCount))
                 end
@@ -1465,6 +1443,10 @@ oldNamecallInternal = hookmetamethod(game, "__namecall", newcclosure(function(se
             end
         end
     end
+
+    if setnamecallmethod then setnamecallmethod(method) end
+    return oldNamecall(self, ...)
+end))
 
     if setnamecallmethod then setnamecallmethod(method) end
     return oldNamecall(self, ...)
