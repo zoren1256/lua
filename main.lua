@@ -1448,10 +1448,6 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
     return oldNamecall(self, ...)
 end))
 
-    if setnamecallmethod then setnamecallmethod(method) end
-    return oldNamecall(self, ...)
-end))
-
 --------------------------------------------------------------------------------
 -- 建立 UI 選單
 --------------------------------------------------------------------------------
