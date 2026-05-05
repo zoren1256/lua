@@ -1092,10 +1092,13 @@ UserInputService.InputEnded:Connect(function(input, gpe)
 end)
 
 -- 子彈射速調整 (Rapid Fire)
+-- 原理：玩家按住左鍵時，外掛在背景高速「放開→重新按下」來模擬連點
 task.spawn(function()
     while true do
         if Toggles.RapidFire and IsShooting then
-            mouse1click()
+            mouse1release()
+            task.wait(0.001)
+            mouse1press()
             task.wait(Settings.FireRateDelay)
         else
             task.wait(0.1)
