@@ -1276,35 +1276,27 @@ local function ApplySkin(obj)
     if not obj then return end
     for _, part in pairs(obj:GetDescendants()) do
         if part:IsA("BasePart") then
-            -- 1. 隱藏原本的槍身零件
-            part.Transparency = 1
+            -- 1. 隱藏原本的槍身零件 (使用 LocalTransparencyModifier 確保穩定)
+            part.LocalTransparencyModifier = 1
+            part.Transparency = 1 -- 雙重保險
             
-            -- 2. 在零件中心注入雜訊粒子 (只在主體零件注入，避免粒子過多卡頓)
-            local name = part.Name:lower()
-            if not part:FindFirstChild("PONY_GlitchCloud") and (name:find("handle") or name:find("body") or name:find("barrel") or name:find("gun")) then
+            -- 2. 注入雜訊粒子 (不再限制名稱，只要是 BasePart 且夠大的就注入)
+            if not part:FindFirstChild("PONY_GlitchCloud") then
                 local emitter = Instance.new("ParticleEmitter")
                 emitter.Name = "PONY_GlitchCloud"
-                emitter.Texture = "rbxassetid://451336109" -- 數位雜訊貼圖
-                emitter.Color = ColorSequence.new(Color3.fromRGB(180, 50, 255)) -- 霓虹紫
+                emitter.Texture = "rbxassetid://451336109"
+                emitter.Color = ColorSequence.new(Color3.fromRGB(180, 50, 255))
                 emitter.Size = NumberSequence.new({
-                    NumberSequenceKeypoint.new(0, 0.8),
-                    NumberSequenceKeypoint.new(0.5, 1.5),
+                    NumberSequenceKeypoint.new(0, 0.5),
+                    NumberSequenceKeypoint.new(0.5, 1.2),
                     NumberSequenceKeypoint.new(1, 0)
                 })
-                emitter.Rate = 1000 -- 極高密度
-                emitter.Speed = NumberRange.new(0, 3)
-                emitter.Lifetime = NumberRange.new(0.1, 0.3) -- 快速閃爍
-                emitter.Transparency = NumberSequence.new(0.2, 1)
+                emitter.Rate = 200 -- 每一個零件都加一點，集合起來就是一大團
+                emitter.Speed = NumberRange.new(0, 1)
+                emitter.Lifetime = NumberRange.new(0.1, 0.3)
+                emitter.Transparency = NumberSequence.new(0.3, 1)
                 emitter.SpreadAngle = Vector2.new(360, 360)
-                emitter.RotSpeed = NumberRange.new(-500, 500)
                 emitter.Parent = part
-                
-                -- 增加發光電氣感
-                local light = Instance.new("PointLight")
-                light.Color = Color3.fromRGB(180, 50, 255)
-                light.Range = 5
-                light.Brightness = 2
-                light.Parent = part
             end
         end
     end
@@ -1656,7 +1648,7 @@ RunService.Stepped:Connect(function()
         end
     end
     
-    -- 藏頭邏輯 (Anti-Headshot)
+    -- 藏頭邏輯 (Anti-Headshot) - 提升到 RenderStepped 並修改 C0 確保強制覆蓋
     if Toggles.AntiHeadshot then
         local char = LocalPlayer.Character
         if char then
@@ -1664,14 +1656,12 @@ RunService.Stepped:Connect(function()
             if isR15 then
                 local neck = char.UpperTorso:FindFirstChild("Neck")
                 if neck then
-                    -- 強行向下旋轉 180 度 (把頭塞進肚子)
-                    neck.Transform = CFrame.Angles(math.rad(-180), 0, 0)
+                    neck.C0 = CFrame.new(0, -1, 0) * CFrame.Angles(math.rad(-160), 0, 0) -- 直接把脖子節點往下移並反轉
                 end
             else
-                -- R6 版本
                 local neck = char:FindFirstChild("Torso") and char.Torso:FindFirstChild("Neck")
                 if neck then
-                    neck.Transform = CFrame.Angles(math.rad(-180), 0, 0)
+                    neck.C0 = CFrame.new(0, -1, 0) * CFrame.Angles(math.rad(-160), 0, 0)
                 end
             end
         end
