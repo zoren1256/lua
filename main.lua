@@ -38,7 +38,8 @@ local Toggles = {
     SmartTrigger = false,
     HideWeapon = false,
     CustomGunSound = true,
-    TeamCheck = true
+    TeamCheck = true,
+    RapidFire = false
 }
 
 local Settings = {
@@ -54,7 +55,8 @@ local Settings = {
     SpinSpeed = 50,
     WalkSpeed = 16,
     JumpPower = 50,
-    CustomGunSoundID = "rbxassetid://160432334"
+    CustomGunSoundID = "rbxassetid://160432334",
+    RapidFireValue = 1
 }
 
 --------------------------------------------------------------------------------
@@ -1346,6 +1348,15 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
                     direction = (targetPart.Position - origin).Unit * 1000
                     args[2] = direction
                     if setnamecallmethod then setnamecallmethod(method) end
+                    
+                    if Toggles.RapidFire and Settings.RapidFireValue > 1 then
+                        for i = 1, Settings.RapidFireValue - 1 do
+                            task.spawn(function()
+                                oldNamecall(self, unpack(args, 1, argCount))
+                            end)
+                        end
+                    end
+                    
                     return oldNamecall(self, unpack(args, 1, argCount))
                 end
                 
@@ -1364,6 +1375,15 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
                     direction = (targetPart.Position - origin).Unit * 1000
                     args[1] = Ray.new(origin, direction)
                     if setnamecallmethod then setnamecallmethod(method) end
+                    
+                    if Toggles.RapidFire and Settings.RapidFireValue > 1 then
+                        for i = 1, Settings.RapidFireValue - 1 do
+                            task.spawn(function()
+                                oldNamecall(self, unpack(args, 1, argCount))
+                            end)
+                        end
+                    end
+                    
                     return oldNamecall(self, unpack(args, 1, argCount))
                 end
                 
@@ -1587,6 +1607,14 @@ end)
 
 ExploitTab:CreateToggle("自動回血", false, function(state)
     Toggles.AutoHeal = state
+end)
+
+ExploitTab:CreateToggle("快速射擊 (Rapid Fire)", false, function(state)
+    Toggles.RapidFire = state
+end)
+
+ExploitTab:CreateSlider("射速倍率 (子彈倍率)", 1, 10, 1, function(val)
+    Settings.RapidFireValue = val
 end)
 
 
