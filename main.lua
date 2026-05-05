@@ -1479,6 +1479,50 @@ oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, idx)
 end))
 
 --------------------------------------------------------------------------------
+-- 實體導彈追蹤系統 (專治非 Raycast 的拋物線武器如弓箭)
+--------------------------------------------------------------------------------
+Workspace.ChildAdded:Connect(function(child)
+    if not Toggles.MagicBullet then return end
+    
+    -- 延遲一下讓遊戲把飛行物設定好
+    task.delay(0.05, function()
+        if not child or not child.Parent or not CachedMagicBulletTargetPart then return end
+        
+        local isProj = false
+        local name = child.Name:lower()
+        
+        -- 判斷是否為實體飛行物 (箭矢、火箭等)
+        if name:find("arrow") or name:find("proj") or name:find("rocket") or name:find("missile") then
+            isProj = true
+        elseif child:IsA("BasePart") and child.Size.Magnitude < 5 and child.Velocity.Magnitude > 30 then
+            -- 有些遊戲直接叫 "Part"，用速度來判斷它是子彈
+            isProj = true
+        end
+        
+        if isProj then
+            -- 持續追蹤導航 (持續 1 秒)
+            task.spawn(function()
+                for i = 1, 20 do
+                    if not child or not child.Parent or not CachedMagicBulletTargetPart then break end
+                    local root = child:IsA("BasePart") and child or child.PrimaryPart or child:FindFirstChildWhichIsA("BasePart")
+                    if root then
+                        local targetPos = CachedMagicBulletTargetPart.Position
+                        local dir = (targetPos - root.Position).Unit
+                        local speed = root.Velocity.Magnitude
+                        if speed < 50 then speed = 150 end -- 保底速度
+                        
+                        -- 覆寫物理速度與朝向，實現物理層面的「半空轉彎」
+                        root.Velocity = dir * speed
+                        root.CFrame = CFrame.new(root.Position, targetPos)
+                    end
+                    task.wait(0.05)
+                end
+            end)
+        end
+    end)
+end)
+
+--------------------------------------------------------------------------------
 -- 建立 UI 選單
 --------------------------------------------------------------------------------
 
