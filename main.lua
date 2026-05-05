@@ -1187,7 +1187,7 @@ RunService.RenderStepped:Connect(function()
             end
         end
 
-        if shouldShoot and tick() - lastTriggerShot > 0.2 then
+        if shouldShoot and tick() - lastTriggerShot > 0.15 then
             lastTriggerShot = tick()
             task.spawn(function()
                 -- 第一發
@@ -1195,9 +1195,9 @@ RunService.RenderStepped:Connect(function()
                 task.wait(0.05)
                 mouse1release()
                 
-                -- 如果開啟二連發，延遲拉長到 0.12 秒，保證傷害確實結算
+                -- 如果開啟二連發，延遲稍微拉長一點點，避免被伺服器擋掉傷害
                 if Toggles.DoubleTap then
-                    task.wait(0.12) 
+                    task.wait(0.08) 
                     mouse1press()
                     task.wait(0.05)
                     mouse1release()
