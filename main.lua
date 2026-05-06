@@ -48,8 +48,8 @@ local Toggles = {
 local Settings = {
     AimbotSmoothness = 1,
     AimbotFOV = 100,
-    AimbotUseFOV = true,
-    AimbotTarget = "Auto (AI)",
+    AimbotUseFOV = false,
+    AimbotTarget = "Head",
     AimbotPrediction = false,
     PredictionAmount = 0.05,
     BulletDrop = 0,
@@ -1441,23 +1441,11 @@ local Window = Library:CreateWindow({
 -- 戰鬥分頁
 local CombatTab = Window:CreateTab("戰鬥")
 
-CombatTab:CreateToggle("啟用自瞄 (右鍵觸發)", false, function(state) Toggles.Aimbot = state end)
+CombatTab:CreateToggle("自瞄 (右鍵觸發)", false, function(state) Toggles.Aimbot = state end)
 CombatTab:CreateToggle("傳統自動開槍 (需對準敵人)", false, function(state) Toggles.TriggerBot = state end)
-CombatTab:CreateToggle("智能自動射擊 (配合靜默)", false, function(state) Toggles.SmartTrigger = state end)
-CombatTab:CreateToggle("啟用靜默追蹤", false, function(state) Toggles.MagicBullet = state end)
-CombatTab:CreateToggle("過濾隊友 (Team Check)", true, function(state) Toggles.TeamCheck = state end)
-CombatTab:CreateToggle("限制鎖定範圍 (FOV)", true, function(state) Settings.AimbotUseFOV = state end)
-CombatTab:CreateToggle("啟用移動預判 (Prediction)", false, function(state) Settings.AimbotPrediction = state end)
-CombatTab:CreateSlider("預判強度 (數字越大越往前)", 0, 20, 5, function(val) Settings.PredictionAmount = val / 100 end)
-CombatTab:CreateSlider("子彈下墜補償 (抬高槍口)", 0, 20, 0, function(val) Settings.BulletDrop = val / 10 end)
-CombatTab:CreateToggle("顯示鎖定範圍", false, function(state) Toggles.ShowFOV = state end)
-CombatTab:CreateSlider("鎖定範圍大小", 10, 500, 100, function(val) Settings.AimbotFOV = val end)
-CombatTab:CreateSlider("自瞄平滑度 (越大越慢)", 1, 20, 1, function(val) Settings.AimbotSmoothness = val end)
-CombatTab:CreateDropdown("自瞄部位", {"Auto (AI)", "Head", "HumanoidRootPart"}, "Auto (AI)", function(val) Settings.AimbotTarget = val end)
-CombatTab:CreateToggle("二連發模式 (Double Tap)", false, function(state) Toggles.DoubleTap = state end)
-
-CombatTab:CreateToggle("啟用判定區擴大", false, function(state) Toggles.HitboxExpander = state end)
-CombatTab:CreateSlider("判定區大小", 2, 20, 5, function(val) Settings.HitboxSize = val end)
+CombatTab:CreateToggle("自動射擊 (配合子彈追蹤)", false, function(state) Toggles.SmartTrigger = state end)
+CombatTab:CreateToggle("子彈追蹤", false, function(state) Toggles.MagicBullet = state end)
+CombatTab:CreateToggle("過濾隊友", true, function(state) Toggles.TeamCheck = state end)
 
 
 -- 視覺分頁
@@ -1467,7 +1455,7 @@ VisualTab:CreateToggle("顯示外框透視", false, function(state) Toggles.BoxE
 VisualTab:CreateToggle("顯示玩家名稱", false, function(state) Toggles.NameESP = state end)
 VisualTab:CreateToggle("顯示血量資訊", false, function(state) Toggles.HealthESP = state end)
 VisualTab:CreateToggle("顯示距離", false, function(state) Toggles.DistanceESP = state end)
-VisualTab:CreateToggle("隱藏手中武器 (乾淨視角)", false, function(state) Toggles.HideWeapon = state end)
+VisualTab:CreateToggle("隱藏手中武器", false, function(state) Toggles.HideWeapon = state end)
 VisualTab:CreateToggle("強制第三人稱視角", false, function(state) Toggles.ThirdPerson = state end)
 VisualTab:CreateSlider("第三人稱距離", 5, 30, 10, function(val) Settings.ThirdPersonDist = val end)
 
@@ -1476,21 +1464,32 @@ VisualTab:CreateSlider("第三人稱距離", 5, 30, 10, function(val) Settings.T
 -- 角色分頁
 local CharacterTab = Window:CreateTab("角色")
 
-CharacterTab:CreateToggle("啟用自訂移動 (鎖定速度與跳躍)", false, function(state) Toggles.CustomMovement = state end)
-CharacterTab:CreateSlider("移動速度 (WalkSpeed)", 16, 200, 16, function(val) Settings.WalkSpeed = val end)
-CharacterTab:CreateSlider("跳躍高度 (JumpPower)", 50, 300, 50, function(val) Settings.JumpPower = val end)
+CharacterTab:CreateToggle("自訂移動 (鎖定速度與跳躍)", false, function(state) Toggles.CustomMovement = state end)
+CharacterTab:CreateSlider("移動速度", 16, 200, 16, function(val) Settings.WalkSpeed = val end)
+CharacterTab:CreateSlider("跳躍高度", 50, 300, 50, function(val) Settings.JumpPower = val end)
 
-CharacterTab:CreateToggle("自動旋轉 (SpinBot)", false, function(state) Toggles.SpinBot = state end)
+CharacterTab:CreateToggle("旋轉角色", false, function(state) Toggles.SpinBot = state end)
 CharacterTab:CreateSlider("旋轉速度", 10, 100, 50, function(val) Settings.SpinSpeed = val end)
 
 local flying = false
 local flySpeed = 50
-CharacterTab:CreateToggle("飛行模式 (Fly)", false, function(state)
+CharacterTab:CreateToggle("飛行", false, function(state)
     flying = state
 end)
 
-CharacterTab:CreateToggle("躲避模式：藏頭 (Anti-Headshot)", false, function(state)
+CharacterTab:CreateToggle("隱藏身體", false, function(state)
     Toggles.AntiHeadshot = state
+    if not state then
+        local char = LocalPlayer.Character
+        if char and char:FindFirstChild("Humanoid") then
+            char.Humanoid.HipHeight = 2 -- 恢復正常高度
+            local root = char:FindFirstChild("HumanoidRootPart")
+            local rootJoint = root and root:FindFirstChild("RootJoint")
+            if rootJoint then
+                rootJoint.Transform = CFrame.new() -- 恢復旋轉
+            end
+        end
+    end
 end)
 
 -- 飛行與穿牆邏輯
@@ -1572,14 +1571,14 @@ end)
 
 
 
-CharacterTab:CreateToggle("角色穿牆 (Noclip)", false, function(state)
+CharacterTab:CreateToggle("角色穿牆", false, function(state)
     Toggles.Noclip = state
 end)
 
 -- 懸浮打坐 (Hover Meditate) - 純腳本強制動作
 local HoverMeditating = false
 
-CharacterTab:CreateToggle("懸浮打坐 (Hover Meditate)", false, function(state)
+CharacterTab:CreateToggle("懸浮打坐 動作", false, function(state)
     HoverMeditating = state
     if not state then
         local char = LocalPlayer.Character
@@ -1624,48 +1623,25 @@ RunService.Stepped:Connect(function()
         end
     end
     
-    -- 藏頭邏輯 (Anti-Headshot)
+    -- 躲避模式: 趴地隱藏 (Anti-Headshot / Crawler)
     if Toggles.AntiHeadshot then
+        local hum = char:FindFirstChild("Humanoid")
+        local root = char:FindFirstChild("HumanoidRootPart")
+        local rootJoint = root and root:FindFirstChild("RootJoint")
         local neck = char:FindFirstChild("Neck", true)
+        
+        if hum then hum.HipHeight = -1.5 end -- 身體陷進地板
+        if rootJoint then
+            -- 將身體旋轉 90 度躺平
+            rootJoint.Transform = CFrame.Angles(math.rad(90), 0, 0)
+        end
         if neck then
+            -- 同時將頭部彎折 180 度隱藏
             neck.Transform = CFrame.Angles(math.rad(-180), 0, 0)
         end
     end
 end)
 
-
--- 破解分頁
-local ExploitTab = Window:CreateTab("破解")
-
-ExploitTab:CreateButton("解鎖全造型 (本地視覺)", function()
-    pcall(function()
-        game.StarterGui:SetCore("SendNotification", {
-            Title = "提示",
-            Text = "嘗試解鎖本地造型... (若無效代表伺服器已防護)",
-            Duration = 3,
-        })
-    end)
-end)
-
-ExploitTab:CreateToggle("無限子彈 (嘗試Hook)", false, function(state)
-    Toggles.InfiniteAmmo = state
-end)
-
-ExploitTab:CreateToggle("自動回血", false, function(state)
-    Toggles.AutoHeal = state
-end)
-
--- 強制換膚已設為預設開啟且不顯示於 UI
-
-
--- 雜項分頁
-local MiscTab = Window:CreateTab("雜項")
-
-MiscTab:CreateButton("強制關閉腳本", function()
-    local gui = CoreGui:FindFirstChild("PONY_Rivals") or LocalPlayer:WaitForChild("PlayerGui"):FindFirstChild("PONY_Rivals")
-    if gui then gui:Destroy() end
-    if FOVCircle then FOVCircle:Remove() end
-end)
 
 -- 播放歡迎動畫
 task.spawn(function()
