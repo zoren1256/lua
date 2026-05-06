@@ -1477,19 +1477,8 @@ CharacterTab:CreateToggle("飛行", false, function(state)
     flying = state
 end)
 
-CharacterTab:CreateToggle("隱藏身體", false, function(state)
+CharacterTab:CreateToggle("隱藏頭部", false, function(state)
     Toggles.AntiHeadshot = state
-    if not state then
-        local char = LocalPlayer.Character
-        if char and char:FindFirstChild("Humanoid") then
-            char.Humanoid.HipHeight = 2 -- 恢復正常高度
-            local root = char:FindFirstChild("HumanoidRootPart")
-            local rootJoint = root and root:FindFirstChild("RootJoint")
-            if rootJoint then
-                rootJoint.Transform = CFrame.new() -- 恢復旋轉
-            end
-        end
-    end
 end)
 
 -- 飛行與穿牆邏輯
@@ -1623,20 +1612,10 @@ RunService.Stepped:Connect(function()
         end
     end
     
-    -- 躲避模式: 趴地隱藏 (Anti-Headshot / Crawler)
+    -- 藏頭邏輯 (Anti-Headshot)
     if Toggles.AntiHeadshot then
-        local hum = char:FindFirstChild("Humanoid")
-        local root = char:FindFirstChild("HumanoidRootPart")
-        local rootJoint = root and root:FindFirstChild("RootJoint")
         local neck = char:FindFirstChild("Neck", true)
-        
-        if hum then hum.HipHeight = -1.5 end -- 身體陷進地板
-        if rootJoint then
-            -- 將身體旋轉 90 度躺平
-            rootJoint.Transform = CFrame.Angles(math.rad(90), 0, 0)
-        end
         if neck then
-            -- 同時將頭部彎折 180 度隱藏
             neck.Transform = CFrame.Angles(math.rad(-180), 0, 0)
         end
     end
