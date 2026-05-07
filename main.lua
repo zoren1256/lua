@@ -68,7 +68,7 @@ local Settings = {
 local function CreateSnow()
     local snowPart = Instance.new("Part")
     snowPart.Name = "PONYSnowPart"
-    snowPart.Size = Vector3.new(300, 1, 300)
+    snowPart.Size = Vector3.new(500, 1, 500)
     snowPart.Transparency = 1
     snowPart.Anchored = true
     snowPart.CanCollide = false
@@ -78,14 +78,14 @@ local function CreateSnow()
     local snowEmitter = Instance.new("ParticleEmitter")
     snowEmitter.Parent = snowPart
     -- 不設定 Texture，強制使用 Roblox 內建白點粒子，保證 100% 渲染
-    snowEmitter.Rate = 15000 -- 大雪紛飛 (原本 5000)
-    snowEmitter.Speed = NumberRange.new(50, 100) -- 稍微加快雪花飄落速度
-    snowEmitter.Lifetime = NumberRange.new(5, 8)
+    snowEmitter.Rate = 50000 -- 大幅增加雪量 (從 15000 提升)
+    snowEmitter.Speed = NumberRange.new(30, 150) -- 增加速度隨機性
+    snowEmitter.Lifetime = NumberRange.new(4, 6)
     snowEmitter.Rotation = NumberRange.new(0, 360)
     snowEmitter.RotSpeed = NumberRange.new(-50, 50)
     snowEmitter.Size = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 0.6),
-        NumberSequenceKeypoint.new(1, 0.3)
+        NumberSequenceKeypoint.new(0, 0.8), -- 放大雪花
+        NumberSequenceKeypoint.new(1, 0.4)
     })
     snowEmitter.Transparency = NumberSequence.new({
         NumberSequenceKeypoint.new(0, 0),
@@ -153,14 +153,14 @@ local function CreateSnow()
             
             local atmo = Lighting:FindFirstChildOfClass("Atmosphere")
             if atmo then
-                atmo.Density = 0.8 -- 稍微調降一點霧氣密度讓視野好一點
+                atmo.Density = 0.4 -- 霧氣減半 (從 0.8 降到 0.4)，視野變清晰
                 atmo.Color = Color3.fromRGB(130, 40, 220) -- 妖豔的深紫色天空/霧氣
                 atmo.Glare = 0
-                atmo.Haze = 10
+                atmo.Haze = 5 -- 降低霧霾感
             else
                 Lighting.FogColor = Color3.fromRGB(130, 40, 220)
-                Lighting.FogStart = 10
-                Lighting.FogEnd = 200 -- 延長能見度，避免全盲
+                Lighting.FogStart = 50
+                Lighting.FogEnd = 500 -- 大幅延長能見度 (從 200 提升)
             end
         end)
     end)
@@ -1551,10 +1551,28 @@ RunService.RenderStepped:Connect(function(deltaTime)
     end
     
     -- 自訂移動 (強制鎖定速度與跳躍高度，防止遊戲覆蓋)
+    -- 使用 RenderStepped 極高頻率覆蓋，確保走路也能生效
     if Toggles.CustomMovement and hum then
-        hum.WalkSpeed = Settings.WalkSpeed
-        hum.UseJumpPower = true
-        hum.JumpPower = Settings.JumpPower
+        if hum.WalkSpeed ~= Settings.WalkSpeed then
+            hum.WalkSpeed = Settings.WalkSpeed
+        end
+        if not hum.UseJumpPower then
+            hum.UseJumpPower = true
+        end
+        if hum.JumpPower ~= Settings.JumpPower then
+            hum.JumpPower = Settings.JumpPower
+        end
+    end
+end)
+
+-- 額外防線：當遊戲嘗試修改 WalkSpeed 時瞬間改回來
+RunService.Heartbeat:Connect(function()
+    if Toggles.CustomMovement and LocalPlayer.Character then
+        local hum = LocalPlayer.Character:FindFirstChild("Humanoid")
+        if hum then
+            hum.WalkSpeed = Settings.WalkSpeed
+            hum.JumpPower = Settings.JumpPower
+        end
     end
 end)
 
