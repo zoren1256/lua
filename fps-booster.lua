@@ -20,13 +20,15 @@ end
 
 -- 2. 優化 Terrain (地形與水面)
 if Terrain then
-    Terrain.WaterWaveSize = 0
-    Terrain.WaterWaveSpeed = 0
-    Terrain.WaterReflectance = 0
-    Terrain.WaterTransparency = 0
-    Terrain.Decoration = false -- 關閉草地
-    Terrain.Lighting = false
-    Terrain.MaterialColors = {}
+    pcall(function()
+        Terrain.WaterWaveSize = 0
+        Terrain.WaterWaveSpeed = 0
+        Terrain.WaterReflectance = 0
+        Terrain.WaterTransparency = 0
+        Terrain.Decoration = false -- 關閉草地 (使用 pcall 避免報錯)
+        Terrain.Lighting = false
+        Terrain.MaterialColors = {}
+    end)
 end
 
 -- 3. 遞迴優化所有物件 (材質、特效、貼圖)
