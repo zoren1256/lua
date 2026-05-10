@@ -82,3 +82,48 @@ pcall(function()
         Duration = 5,
     })
 end)
+
+-- 4. 建立右上角 FPS 顯示器
+local CoreGui = game:GetService("CoreGui")
+local RunService = game:GetService("RunService")
+
+local fpsGui = Instance.new("ScreenGui")
+fpsGui.Name = "PonyFPSCounter"
+fpsGui.ResetOnSpawn = false
+-- 嘗試放入 CoreGui 避免被遊戲的 UI 清理機制刪除
+pcall(function()
+    fpsGui.Parent = CoreGui
+end)
+if fpsGui.Parent == nil then
+    fpsGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+end
+
+local fpsLabel = Instance.new("TextLabel")
+fpsLabel.Size = UDim2.new(0, 100, 0, 30)
+fpsLabel.Position = UDim2.new(1, -110, 0, 10) -- 右上角
+fpsLabel.BackgroundTransparency = 0.5
+fpsLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+fpsLabel.TextColor3 = Color3.fromRGB(147, 51, 234) -- PONY Purple
+fpsLabel.Font = Enum.Font.Code
+fpsLabel.TextSize = 18
+fpsLabel.TextStrokeTransparency = 0
+fpsLabel.Text = "FPS: --"
+fpsLabel.Parent = fpsGui
+
+-- 添加圓角讓 UI 更好看
+local uiCorner = Instance.new("UICorner")
+uiCorner.CornerRadius = UDim.new(0, 4)
+uiCorner.Parent = fpsLabel
+
+local frames = 0
+local lastUpdate = tick()
+
+RunService.RenderStepped:Connect(function()
+    frames = frames + 1
+    local now = tick()
+    if now - lastUpdate >= 1 then
+        fpsLabel.Text = "FPS: " .. tostring(math.floor(frames / (now - lastUpdate)))
+        frames = 0
+        lastUpdate = now
+    end
+end)
