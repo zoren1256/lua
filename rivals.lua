@@ -26,7 +26,7 @@ local HttpService = game:GetService("HttpService")
 local isVerified = false
 local globalExpireTime = nil
 local savedKeyFile = "PONY_Key.txt"
-local adLink = "https://zoren.org/generate" 
+local adLink = "https://work.ink/2ARA/pony-key-system" 
 local hwid = game:GetService("RbxAnalyticsService"):GetClientId()
 
 -- 驗證函數 (後台)
